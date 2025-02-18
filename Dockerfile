@@ -4,13 +4,13 @@ WORKDIR /app
 
 # Copy package files and install dependencies
 COPY package.json package-lock.json* ./
-RUN npm ci
+RUN bun i
 
 # Copy the rest of the project files
 COPY . .
 
 # Build the project (assumes your build script is defined as "build")
-RUN npm run build
+RUN bun run build
 
 # Stage 2: Serve with Nginx
 FROM nginx:stable-alpine
