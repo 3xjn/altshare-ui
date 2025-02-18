@@ -734,14 +734,16 @@ export function Accounts() {
                             </DialogDescription>
                         </DialogHeader>
                         {inviteCode ? (
-                            <TextLabel
-                                content={
-                                    inviteCode
-                                        ? `${window.location.origin}/invite?code=${inviteCode}`
-                                        : ""
-                                }
-                                showCopyButton
-                            />
+                            <div className="max-w-full break-all">
+                                <TextLabel
+                                    content={
+                                        inviteCode
+                                            ? `${window.location.origin}/invite?code=${inviteCode}`
+                                            : ""
+                                    }
+                                    showCopyButton
+                                />
+                            </div>
                         ) : (
                             <CircularProgress />
                         )}
