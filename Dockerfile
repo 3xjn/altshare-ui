@@ -1,5 +1,5 @@
 # Stage 1: Build the Vite project
-FROM node:18-alpine AS builder
+FROM oven/bun:latest AS builder
 WORKDIR /app
 
 # Copy package files and install dependencies
