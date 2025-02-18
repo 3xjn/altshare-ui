@@ -1,0 +1,8 @@
+version: '3.8'
+services:
+  altshareui:
+    image: ghcr.io/3xjn/altshareui:latest
+    container_name: altshareui
+    restart: always
+    ports:
+      - "5001:80"
