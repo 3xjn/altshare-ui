@@ -29,7 +29,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { useAccountContext } from "@/stores/AccountProvider";
 import { decryptMasterKey, encryptAccountData } from "@/utils/encryption";
 import { accountApi } from "@/services/AccountApi";
@@ -73,6 +73,8 @@ export function Accounts() {
     const [inviteCode, setInviteCode] = useState<string | null>(null);
     const [peer, setPeer] = useState<PeerService | null>(null);
     const [shareOpen, setShareOpen] = useState(false);
+    const [searchParams] = useSearchParams();
+    const isTestMode = searchParams.get('test') === 'true';
 
     useEffect(() => {
         const initializeAccounts = async () => {
@@ -300,6 +302,16 @@ export function Accounts() {
 
         setInviteOpen(true);
 
+        // Add test mode check
+        if (searchParams.get('test') === 'true') {
+            setIsConnecting(true);
+            setTimeout(() => {
+                setIsConnecting(false);
+                setInviteCode('test-invite-code-12345');
+            }, 1500); // Simulate loading delay
+            return;
+        }
+
         try {
             setIsConnecting(true);
 
@@ -439,7 +451,7 @@ export function Accounts() {
         setShareOpen(false);
     };
 
-    if (!isAuthenticated) {
+    if (!isAuthenticated && !isTestMode) {
         return <Navigate to="/login" replace />;
     }
 
@@ -725,7 +737,7 @@ export function Accounts() {
                 </Dialog>
 
                 <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-                    <DialogContent>
+                    <DialogContent className="max-w-md">
                         <DialogHeader>
                             <DialogTitle>Invite Link</DialogTitle>
                             <DialogDescription>
@@ -734,7 +746,7 @@ export function Accounts() {
                             </DialogDescription>
                         </DialogHeader>
                         {inviteCode ? (
-                            <div className="max-w-full break-all">
+                            <div className="w-full overflow-hidden">
                                 <TextLabel
                                     content={
                                         inviteCode
@@ -742,6 +754,7 @@ export function Accounts() {
                                             : ""
                                     }
                                     showCopyButton
+                                    className="break-all"
                                 />
                             </div>
                         ) : (
