@@ -15,11 +15,14 @@ RUN bun run build
 # Stage 2: Serve with Nginx
 FROM nginx:stable-alpine
 
-# Remove the default Nginx static assets
-RUN rm -rf /usr/share/nginx/html/*
+# Remove the default Nginx static assets and config
+RUN rm -rf /usr/share/nginx/html/* /etc/nginx/conf.d/*
 
 # Copy built files from the builder stage to the Nginx directory
 COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy our custom nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Expose port 80
 EXPOSE 80
