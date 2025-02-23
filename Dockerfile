@@ -9,20 +9,18 @@ RUN bun i
 # Copy the rest of the project files
 COPY . .
 
-# Build the project (assumes your build script is defined as "build")
+# Build the project
 RUN bun run build
 
 # Stage 2: Serve with Nginx
 FROM nginx:stable-alpine
 
-# Remove the default Nginx static assets and config
-RUN rm -rf /usr/share/nginx/html/* /etc/nginx/conf.d/*
+# Create nginx configuration
+RUN mkdir -p /etc/nginx/conf.d
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built files from the builder stage to the Nginx directory
 COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copy our custom nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Expose port 80
 EXPOSE 80
