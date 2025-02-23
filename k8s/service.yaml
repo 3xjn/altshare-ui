@@ -6,6 +6,7 @@ spec:
   selector:
     app: altshare-ui
   ports:
-    - port: 80
-      targetPort: 3000
+  - port: 80
+    targetPort: 80
+    protocol: TCP
   type: ClusterIP 
