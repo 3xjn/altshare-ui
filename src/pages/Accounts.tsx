@@ -49,6 +49,7 @@ import { SignalRService } from "@/services/SignalR";
 import { CircularProgress } from "@/components/ui/progress";
 import { PeerService } from "@/services/PeerService";
 import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/crypto";
+import { RankSelect } from "@/components/rank-select";
 
 export function Accounts() {
     const {
@@ -183,11 +184,14 @@ export function Accounts() {
             throw new Error("Missing credentials");
         }
 
+        console.log(currentPassword);
+
         const { encryptedData, userKey } = await encryptAccountData(
             accountData,
             currentPassword,
             masterKeyParams
         );
+        console.log("Encryption result:", { encryptedData, userKey });
 
         await accountApi.addAccount({
             encryptedData,
@@ -349,6 +353,13 @@ export function Accounts() {
                     masterKeyParams.tag,
                     currentPassword
                 );
+                console.log("Decryption params:", { 
+                    masterKeyEncrypted: masterKeyParams.masterKeyEncrypted, 
+                    masterKeyIv: masterKeyParams.masterKeyIv, 
+                    salt: masterKeyParams.salt, 
+                    tag: masterKeyParams.tag,
+                    password: currentPassword 
+                });
 
                 const rawKeyBuffer = await crypto.subtle.exportKey(
                     "raw",
@@ -537,9 +548,9 @@ export function Accounts() {
                                     <TableHead className="w-[200px]">
                                         Password
                                     </TableHead>
-                                    {/* <TableHead className="w-[120px]">
+                                    <TableHead className="w-[120px]">
                                         Rank
-                                    </TableHead> */}
+                                    </TableHead>
                                     <TableHead>Notes</TableHead>
                                     <TableHead className="w-[100px] text-right">
                                         Actions
@@ -610,15 +621,11 @@ export function Accounts() {
                                                     showEyeButton
                                                 />
                                             </TableCell>
-                                            {/* <TableCell>
-                                                <TextLabel
-                                                    content={
-                                                        account.rank ||
-                                                        "Unknown"
-                                                    }
-                                                    showCopyButton
-                                                />
-                                            </TableCell> */}
+                                            <TableCell>
+                                               <RankSelect 
+                                                 rank={account.notes as "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "DIAMOND" | "GRANDMASTER" | "CELESTIAL" | "ETERNITY" | "ONE ABOVE ALL"} 
+                                               />
+                                            </TableCell>
                                             <TableCell>
                                                 <ExpandableNotes
                                                     content={

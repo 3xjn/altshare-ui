@@ -13,6 +13,8 @@ export async function encryptAccountData(
     password: string,
     masterKeyParams: MasterKeyParams
 ) {
+    console.log(masterKeyParams);
+
     const masterKey = await decryptMasterKey(
         masterKeyParams.masterKeyEncrypted,
         masterKeyParams.masterKeyIv,
@@ -33,7 +35,7 @@ export async function encryptAccountData(
     // The encrypted result already includes the tag at the end
     return {
         encryptedData: arrayBufferToBase64(encrypted),
-        userKey: arrayBufferToBase64(iv)
+        userKey: arrayBufferToBase64(iv.buffer)
     };
 }
 

@@ -57,9 +57,9 @@ export async function encryptData(data: string, key: CryptoKey): Promise<Encrypt
     const tag = encryptedBytes.slice(encryptedBytes.length - tagLength);
 
     return {
-        encryptedData: arrayBufferToBase64(ciphertext),
+        encryptedData: arrayBufferToBase64(ciphertext.buffer),
         iv: arrayBufferToBase64(iv),
-        tag: arrayBufferToBase64(tag)
+        tag: arrayBufferToBase64(tag.buffer)
     };
 }
 
@@ -150,7 +150,7 @@ export async function setupUserEncryption(password: string) {
     const salt = crypto.getRandomValues(new Uint8Array(16));
     
     // 2. Derive key using PBKDF2
-    const derivedKey = await deriveEncryptionKey(password, salt);
+    const derivedKey = await deriveEncryptionKey(password, salt.buffer);
     
     // 3. Generate and encrypt master key
     const masterKey = await crypto.subtle.generateKey(
@@ -178,10 +178,10 @@ export async function setupUserEncryption(password: string) {
     return {
         masterKey,
         securityParams: {
-            encryptedMasterKey: arrayBufferToBase64(ciphertext),
-            iv: arrayBufferToBase64(iv),
-            salt: arrayBufferToBase64(salt),
-            tag: arrayBufferToBase64(tag)
+            encryptedMasterKey: arrayBufferToBase64(ciphertext.buffer),
+            iv: arrayBufferToBase64(iv.buffer),
+            salt: arrayBufferToBase64(salt.buffer),
+            tag: arrayBufferToBase64(tag.buffer)
         }
     };
 }
@@ -205,7 +205,7 @@ export async function encryptExistingMasterKey(base64Key: string, password: stri
     const salt = crypto.getRandomValues(new Uint8Array(16));
     
     // Derive key from password using PBKDF2
-    const derivedKey = await deriveEncryptionKey(password, salt);
+    const derivedKey = await deriveEncryptionKey(password, salt.buffer);
     
     // Convert the base64 key back to raw format
     const rawMasterKey = base64ToArrayBuffer(base64Key);
@@ -227,9 +227,9 @@ export async function encryptExistingMasterKey(base64Key: string, password: stri
     const tag = encryptedBytes.slice(encryptedBytes.length - tagLength);
 
     return {
-        encryptedMasterKey: arrayBufferToBase64(ciphertext),
-        iv: arrayBufferToBase64(iv),
-        salt: arrayBufferToBase64(salt),
-        tag: arrayBufferToBase64(tag)
+        encryptedMasterKey: arrayBufferToBase64(ciphertext.buffer),
+        iv: arrayBufferToBase64(iv.buffer),
+        salt: arrayBufferToBase64(salt.buffer),
+        tag: arrayBufferToBase64(tag.buffer)
     };
 } 

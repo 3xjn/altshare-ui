@@ -12,7 +12,7 @@ export class ApiService {
         });
 
         this.api.interceptors.request.use((config) => {
-            const token = Cookies.get('token');
+            const token = Cookies.get('Authorization'); // Changed from 'Authorization' to 'token'
             if (token) {
                 config.headers.Authorization = `Bearer ${token}`;
             }
@@ -27,4 +27,4 @@ export class ApiService {
             'Content-Type': 'application/json',
         };
     }
-} 
+}
