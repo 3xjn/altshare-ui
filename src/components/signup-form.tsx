@@ -74,21 +74,21 @@ const MyForm = () => {
                 masterKeyEncrypted: securityParams.encryptedMasterKey,
                 iv: securityParams.iv,
                 salt: securityParams.salt,
-                tag: securityParams.tag
+                tag: securityParams.tag,
             });
 
             if (response.token) {
-                Cookies.set("token", response.token, { 
-                    path: '/',
-                    sameSite: 'strict',
-                    expires: 1 // 1 day
+                Cookies.set("token", response.token, {
+                    path: "/",
+                    sameSite: "strict",
+                    expires: 1, // 1 day
                 });
-                
+
                 setMasterKeyParams({
                     masterKeyEncrypted: response.masterKeyEncrypted,
                     masterKeyIv: response.masterKeyIv,
                     salt: response.salt,
-                    tag: response.tag ?? ""
+                    tag: response.tag ?? "",
                 });
 
                 // validate the new token
@@ -101,11 +101,15 @@ const MyForm = () => {
                 }
             }
         } catch (error) {
-            console.error('Registration failed:', error);
+            console.error("Registration failed:", error);
             toast({
                 variant: "destructive",
                 title: "Registration Failed",
-                description: error instanceof Error ? (error as never as { response: AxiosResponse }).response.data.error : "An unknown error occurred"
+                description:
+                    error instanceof Error
+                        ? (error as never as { response: AxiosResponse })
+                              .response.data.error
+                        : "An unknown error occurred",
             });
         }
     };
@@ -192,11 +196,13 @@ export function SignupForm({
         <div className={cn("flex flex-col gap-6", className)} {...props}>
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-2xl">
-                        Sign up to Account Sharing
-                    </CardTitle>
+                    <img
+                        className="rounded-md mx-[24px] mb-2 scale-75"
+                        src="./images/banner-light.png"
+                    />
+                    <CardTitle className="text-2xl">Sign up</CardTitle>
                     <CardDescription>
-                        Enter your email below to create your account
+                        Enter your information below to create your account
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

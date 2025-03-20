@@ -74,7 +74,7 @@ export function Accounts() {
     const [peer, setPeer] = useState<PeerService | null>(null);
     const [shareOpen, setShareOpen] = useState(false);
     const [searchParams] = useSearchParams();
-    const isTestMode = searchParams.get('test') === 'true';
+    const isTestMode = searchParams.get("test") === "true";
 
     useEffect(() => {
         const initializeAccounts = async () => {
@@ -303,11 +303,11 @@ export function Accounts() {
         setInviteOpen(true);
 
         // Add test mode check
-        if (searchParams.get('test') === 'true') {
+        if (searchParams.get("test") === "true") {
             setIsConnecting(true);
             setTimeout(() => {
                 setIsConnecting(false);
-                setInviteCode('test-invite-code-12345');
+                setInviteCode("test-invite-code-12345");
             }, 1500); // Simulate loading delay
             return;
         }
@@ -337,9 +337,11 @@ export function Accounts() {
 
             const peer = new PeerService(service);
 
-            peer.registerHandler('verification', async (payload) => {
+            peer.registerHandler("verification", async (payload) => {
                 if (!masterKeyParams || !currentPassword) {
-                    throw new Error("Missing master key parameters or password");
+                    throw new Error(
+                        "Missing master key parameters or password"
+                    );
                 }
 
                 const decryptedMasterKey = await decryptMasterKey(
@@ -356,39 +358,41 @@ export function Accounts() {
                 );
 
                 const hmacKey = await crypto.subtle.importKey(
-                    'raw',
+                    "raw",
                     rawKeyBuffer,
-                    { name: 'HMAC', hash: 'SHA-256' },
+                    { name: "HMAC", hash: "SHA-256" },
                     false,
-                    ['sign']
+                    ["sign"]
                 );
 
                 const theirSignature = base64ToArrayBuffer(payload.signature);
                 const mySignature = await crypto.subtle.sign(
-                    'HMAC',
+                    "HMAC",
                     hmacKey,
                     base64ToArrayBuffer(payload.token)
                 );
 
                 // Verify signatures match
                 const verified = new Uint8Array(theirSignature).every(
-                    (value, index) => value === new Uint8Array(mySignature)[index]
+                    (value, index) =>
+                        value === new Uint8Array(mySignature)[index]
                 );
-                
+
                 if (verified) {
                     // Create sharing relationship
                     await accountApi.createSharingRelationship({
                         sharedWithEmail: payload.encryptedKey.email,
-                        encryptedMasterKey: payload.encryptedKey.encryptedMasterKey,
+                        encryptedMasterKey:
+                            payload.encryptedKey.encryptedMasterKey,
                         iv: payload.encryptedKey.iv,
                         salt: payload.encryptedKey.salt,
-                        tag: payload.encryptedKey.tag
+                        tag: payload.encryptedKey.tag,
                     });
 
                     peer.sendMessage("sharingConfirmation", {
-                        success: true
-                    })
-                    
+                        success: true,
+                    });
+
                     toast({
                         title: "Success",
                         description: "Account sharing verified successfully.",
@@ -404,7 +408,7 @@ export function Accounts() {
             });
 
             peer.onConnect = () => {
-                console.log("share open")
+                console.log("share open");
                 setShareOpen(true);
             };
 
@@ -444,8 +448,8 @@ export function Accounts() {
             decryptedMasterKey
         );
 
-        peer!.sendMessage('masterKey', {
-            key: arrayBufferToBase64(rawKeyBuffer)
+        peer!.sendMessage("masterKey", {
+            key: arrayBufferToBase64(rawKeyBuffer),
         });
 
         setShareOpen(false);
@@ -459,7 +463,10 @@ export function Accounts() {
         <div className="min-h-screen bg-background p-8">
             <div className="max-w-7xl mx-auto space-y-6">
                 <div className="flex items-center justify-between">
-                    <h1 className="text-3xl font-semibold">Accounts</h1>
+                    <img
+                        className="rounded-md mb-2 w-[15%] h-[15%]"
+                        src="./images/banner-light.png"
+                    />
                     <div className="flex items-center gap-3">
                         <Button
                             onClick={handleRefresh}
@@ -526,6 +533,7 @@ export function Accounts() {
                     </div>
                 </div>
 
+                {/* <h1 className="text-3xl font-semibold">Accounts</h1> */}
                 <div className="rounded-lg border bg-white">
                     <div className="px-6">
                         <Table>
