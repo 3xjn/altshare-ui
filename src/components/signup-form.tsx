@@ -18,7 +18,7 @@ import YupPassword from "yup-password";
 import { AccountCreationDto } from "@/models/UserAccount";
 import { authApi } from "@/services/AuthApi";
 import { setupUserEncryption } from "@/utils/encryption_v2";
-import { useAccountContext } from "@/stores/AccountProvider";
+import { useAccountStore } from "@/stores/AccountStore";
 YupPassword(yup);
 
 import Cookies from "js-cookie";
@@ -69,57 +69,53 @@ const MyForm = () => {
         resolver: yupResolver(schema),
     });
 
-    const { setIsAuthenticated, setMasterKeyParams } = useAccountContext();
+    const { setIsAuthenticated, setEncryptedMasterKey } = useAccountStore();
 
     const onSubmit: SubmitHandler<AccountCreationDto> = async (data) => {
         try {
-            console.log("Starting registration process with password:", data.password.substring(0, 1) + '*'.repeat(data.password.length - 1));
-            
+            console.log(
+                "Starting registration process with password:",
+                data.password.substring(0, 1) +
+                    "*".repeat(data.password.length - 1)
+            );
+
             console.log("Initializing encryption...");
+
             let encryptedMasterKey;
             try {
                 encryptedMasterKey = await setupUserEncryption(data.password);
-                console.log("Encryption successful:", encryptedMasterKey.substring(0, 10) + '...');
-            } catch (encryptError) {
-                console.error("Encryption initialization failed:", encryptError);
-                
-                // Show detailed error to help debug the sodium issue
-                let errorMessage = "Failed to initialize encryption";
-                if (encryptError instanceof Error) {
-                    errorMessage = `Sodium error: ${encryptError.message}`;
-                    console.error("Error details:", encryptError.stack);
+                console.log(
+                    "Encryption successful:",
+                    encryptedMasterKey.substring(0, 10) + "..."
+                );
+            } catch (err) {
+                if (err instanceof Error) {
+                    toast({
+                        variant: "destructive",
+                        title: "Encryption Setup Error",
+                        description: err.message, 
+                    });
                 }
-                
-                toast({
-                    variant: "destructive",
-                    title: "Encryption Setup Error",
-                    description: errorMessage
-                });
                 return;
             }
-            
+
             console.log("Sending registration request...");
             const response = await authApi.register({
                 email: data.email,
                 password: data.password,
                 username: data.username,
                 passwordConfirmation: data.passwordConfirmation,
-                masterKeyEncrypted: encryptedMasterKey
+                masterKeyEncrypted: encryptedMasterKey,
             });
 
             if (response.token) {
-                Cookies.set("token", response.token, { 
-                    path: '/',
-                    sameSite: 'strict',
-                    expires: 1
+                Cookies.set("token", response.token, {
+                    path: "/",
+                    sameSite: "strict",
+                    expires: 1,
                 });
-                
-                setMasterKeyParams({
-                    masterKeyEncrypted: response.masterKeyEncrypted,
-                    masterKeyIv: "",
-                    salt: "",
-                    tag: ""
-                });
+
+                setEncryptedMasterKey(response.masterKeyEncrypted);
 
                 // validate the new token
                 const isValid = await authApi.validate();
@@ -131,22 +127,22 @@ const MyForm = () => {
                 }
             }
         } catch (error) {
-            console.error('Registration failed:', error);
+            console.error("Registration failed:", error);
             let errorMessage = "An unknown error occurred";
-            
+
             if (error instanceof Error) {
                 errorMessage = error.message;
-                // Try to extract more detailed error information
+
                 const apiError = error as ApiError;
                 if (apiError.response?.data?.error) {
                     errorMessage = apiError.response.data.error;
                 }
             }
-            
+
             toast({
                 variant: "destructive",
                 title: "Registration Failed",
-                description: errorMessage
+                description: errorMessage,
             });
         }
     };

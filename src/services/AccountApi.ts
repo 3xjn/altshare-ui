@@ -2,7 +2,6 @@ import { ApiService } from './ApiService';
 
 interface AddAccountRequest {
     encryptedData: string;
-    userKey: string;
 }
 
 interface EncryptedAccount {
@@ -35,7 +34,7 @@ interface SharedAccountResponse {
 export class AccountApi extends ApiService {
     route: string = "/api/account"
 
-    async getAccounts(): Promise<{ encryptedAccounts: EncryptedAccount[] }> {
+    async getAccounts(): Promise<EncryptedAccount[]> {
         const response = await this.api.get(this.route);
         return response.data;
     }

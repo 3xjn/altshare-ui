@@ -23,7 +23,7 @@ import {
     useSearchParams,
 } from "react-router-dom";
 import { Toast, useToast } from "@/hooks/use-toast";
-import { useAccountContext } from "@/stores/AccountProvider";
+import { useAccountStore } from "@/stores/AccountStore";
 import { authApi } from "@/services/AuthApi";
 import Cookies from "js-cookie";
 
@@ -147,10 +147,10 @@ export function LoginForm({
     const { toast } = useToast();
     const {
         isAuthenticated,
-        setCurrentPassword,
-        setMasterKeyParams,
         setIsAuthenticated,
-    } = useAccountContext();
+        setCurrentPassword,
+        setEncryptedMasterKey
+    } = useAccountStore();
 
     useEffect(() => {
         if (searchParams.get("expired") === "true") {
@@ -186,13 +186,8 @@ export function LoginForm({
     const handleLoginSuccess = (data: LoginSuccessData) => {
         setIsAuthenticated(true);
         setCurrentPassword(data.password);
-        setMasterKeyParams({
-            masterKeyEncrypted: data.response.masterKeyEncrypted,
-            masterKeyIv: data.response.masterKeyIv,
-            salt: data.response.salt,
-            tag: data.response.tag || '',
-        });
-
+        setEncryptedMasterKey(data.response.masterKeyEncrypted)
+        
         navigate("/", { replace: true });
     };
 

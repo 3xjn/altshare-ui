@@ -1,51 +1,81 @@
-import * as _sodium from 'libsodium-wrappers-sumo';
+import CryptoJS from 'crypto-js';
 
-// Basic version that just generates a random key and returns it to verify sodium is working
-export async function setupUserEncryption(password: string): Promise<string> {
+export async function encrypt(plaintext: string, password: string): Promise<string> {
     try {
-        // Ensure sodium is ready
-        await _sodium.ready;
+        const salt = CryptoJS.lib.WordArray.random(128 / 8);
+        const key = CryptoJS.PBKDF2(password, salt, {
+            keySize: 256 / 32,
+            iterations: 1000
+        });
+        const iv = CryptoJS.lib.WordArray.random(128 / 8);
+        const encrypted = CryptoJS.AES.encrypt(plaintext, key, {
+            iv: iv,
+            padding: CryptoJS.pad.Pkcs7,
+            mode: CryptoJS.mode.CBC
+        });
         
-        if (!_sodium || typeof _sodium.randombytes_buf !== 'function') {
-            console.error('Sodium is not properly initialized');
-            throw new Error('Sodium library is not properly initialized');
-        }
+        // Combine salt, IV, and encrypted content using Base64 encoding
+        const combinedData = CryptoJS.enc.Base64.stringify(
+            CryptoJS.lib.WordArray.create([
+                ...salt.words,
+                ...iv.words,
+                ...CryptoJS.enc.Base64.parse(encrypted.toString()).words
+            ])
+        );
         
-        // Log the available functions
-        console.log('Sodium ready:', _sodium.ready);
-        console.log('Sodium library version:', _sodium.SODIUM_LIBRARY_VERSION_MAJOR);
-        console.log('Password length:', password.length); // Use password to avoid unused param warning
-        
-        // Generate a key
-        const keyBytes = _sodium.randombytes_buf(_sodium.crypto_secretbox_KEYBYTES);
-        console.log('Key generated with length:', keyBytes.length);
-        
-        // Convert to standard Base64 that's compatible with .NET
-        // First convert Uint8Array to binary string
-        let binaryString = '';
-        const bytes = new Uint8Array(keyBytes);
-        for (let i = 0; i < bytes.length; i++) {
-            binaryString += String.fromCharCode(bytes[i]);
-        }
-        
-        // Then use btoa to convert to Base64
-        const keyBase64 = btoa(binaryString);
-        console.log('Key as standard base64:', keyBase64.substring(0, 10) + '...');
-        
-        return keyBase64;
+        return combinedData;
     } catch (error) {
-        console.error('Error in setupUserEncryption:', error);
+        console.error('Error encrypting:', error);
         throw error;
     }
 }
 
-// Placeholder implementations for encrypt/decrypt - not actually used in the initial test
-export async function encrypt(plaintext: string, password: string): Promise<string> {
-    console.log('Encrypt called with password length:', password.length);
-    return plaintext;  // Placeholder
+export async function decrypt(cipherText: string, password: string): Promise<string> {
+    try {
+        // Decode the combined Base64 data
+        const combinedData = CryptoJS.enc.Base64.parse(cipherText);
+        
+        // Extract salt (first 16 bytes)
+        const salt = CryptoJS.lib.WordArray.create(combinedData.words.slice(0, 4));
+        
+        // Extract IV (next 16 bytes)
+        const iv = CryptoJS.lib.WordArray.create(combinedData.words.slice(4, 8));
+        
+        // Extract encrypted content (remaining bytes)
+        const encryptedWords = combinedData.words.slice(8);
+        const encrypted = CryptoJS.enc.Base64.stringify(
+            CryptoJS.lib.WordArray.create(encryptedWords)
+        );
+        
+        // Derive the key using the same salt and iterations
+        const key = CryptoJS.PBKDF2(password, salt, {
+            keySize: 256 / 32,
+            iterations: 1000
+        });
+        
+        // Decrypt
+        const decrypted = CryptoJS.AES.decrypt(encrypted, key, {
+            iv: iv,
+            padding: CryptoJS.pad.Pkcs7,
+            mode: CryptoJS.mode.CBC
+        });
+        
+        return decrypted.toString(CryptoJS.enc.Utf8);
+    } catch (error) {
+        console.error('Error decrypting:', error);
+        throw error;
+    }
 }
 
-export async function decrypt(cipherText: string, password: string): Promise<string> {
-    console.log('Decrypt called with password length:', password.length);
-    return cipherText;  // Placeholder
+export async function setupUserEncryption(password: string): Promise<string> {
+    try {
+        // Generate a random key (256 bits = 32 bytes)
+        const randomWordArray = CryptoJS.lib.WordArray.random(32);
+        const keyBase64 = CryptoJS.enc.Base64.stringify(randomWordArray);
+        
+        return encrypt(keyBase64, password);
+    } catch (error) {
+        console.error('Error in setupUserEncryption:', error);
+        throw error;
+    }
 }
