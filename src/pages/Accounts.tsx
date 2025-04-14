@@ -9,14 +9,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import {
-    Plus,
-    Pencil,
-    Trash2,
-    RefreshCcw,
-    Settings,
-    Lock,
-} from "lucide-react";
+import { Plus, Pencil, Trash2, RefreshCcw, Settings, Lock } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -454,7 +447,10 @@ export function Accounts() {
         <div className="min-h-screen bg-background p-8">
             <div className="max-w-7xl mx-auto space-y-6">
                 <div className="flex items-center justify-between">
-                    <h1 className="text-3xl font-semibold">Accounts</h1>
+                    <img
+                        className="rounded-md mb-2 w-[15%] h-[15%]"
+                        src="./images/banner-light.png"
+                    />
                     <div className="flex items-center gap-3">
                         <Button
                             onClick={handleRefresh}
@@ -583,7 +579,8 @@ export function Accounts() {
                                                     No accounts yet
                                                 </h3>
                                                 <p className="text-sm text-muted-foreground">
-                                                    Add an account to get started
+                                                    Add an account to get
+                                                    started
                                                 </p>
                                             </div>
                                         </TableCell>

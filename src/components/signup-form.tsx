@@ -25,7 +25,6 @@ import Cookies from "js-cookie";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 
-// Define a specific error type with response data
 interface ApiError extends Error {
     response?: {
         data?: {
@@ -69,7 +68,8 @@ const MyForm = () => {
         resolver: yupResolver(schema),
     });
 
-    const { setIsAuthenticated, setCurrentPassword, setEncryptedMasterKey } = useAccountStore();
+    const { setIsAuthenticated, setCurrentPassword, setEncryptedMasterKey } =
+        useAccountStore();
 
     const onSubmit: SubmitHandler<AccountCreationDto> = async (data) => {
         try {
@@ -93,7 +93,7 @@ const MyForm = () => {
                     toast({
                         variant: "destructive",
                         title: "Encryption Setup Error",
-                        description: err.message, 
+                        description: err.message,
                     });
                 }
                 return;
@@ -230,11 +230,12 @@ export function SignupForm({
         <div className={cn("flex flex-col gap-6", className)} {...props}>
             <Card>
                 <CardHeader>
-                    <CardTitle className="text-2xl">
-                        Sign up to AltShare
-                    </CardTitle>
+                    <img
+                        className="rounded-md mx-[24px] mb-2 scale-75"
+                        src="./images/banner-light.png"
+                    />
                     <CardDescription>
-                        Enter your email below to create your account
+                        Enter your information below to create your account
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
