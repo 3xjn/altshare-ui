@@ -468,7 +468,7 @@ export function Accounts() {
                             <RefreshCcw />
                             Refresh
                         </Button>
-                        <Button
+                        {/* <Button
                             variant="outline"
                             size="sm"
                             onClick={handleInviteClick}
@@ -504,7 +504,7 @@ export function Accounts() {
                                     Invite
                                 </>
                             )}
-                        </Button>
+                        </Button> */}
                         <DropdownMenu>
                             <DropdownMenuTrigger>
                                 <Settings size={24} strokeWidth={1.5} />
