@@ -57,7 +57,14 @@ jobs:
 
       - name: Update image in deployment manifest
         run: |
-          sed -i "s|image: altshare-ui:latest|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}|" k8s/deployment.yaml
+          export REGISTRY_URL=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          export IMAGE_TAG=${{ github.sha }}
+
+          # Replace variables in all Kubernetes files
+          for file in k8s/*.yaml; do
+            envsubst < $file > ${file}.updated
+            mv ${file}.updated $file
+          done
 
       - name: Apply k8s manifests
         run: |
