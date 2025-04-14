@@ -1,8 +1,8 @@
-import { useAccountContext } from "../stores/AccountProvider";
+import { useAccountStore } from "@/stores/AccountStore";
 import { useLocation, Navigate } from "react-router-dom";
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
-    const { isAuthenticated } = useAccountContext();
+    const { isAuthenticated } = useAccountStore();
     const location = useLocation();
 
     if (isAuthenticated === null) {

@@ -43,11 +43,9 @@ import {
 import { SignalRService } from "@/services/SignalR";
 import { CircularProgress } from "@/components/ui/progress";
 import { PeerService } from "@/services/PeerService";
-import { RankSelect } from "@/components/rank-select";
 import AddAccountDialog from "@/components/AddAccountDialog";
 import { Stack } from "@/components/ui/stack";
 import { getImageFromRank } from "@/utils/getImageFromRank";
-import { randomUUID } from "crypto";
 
 export function Accounts() {
     const {
