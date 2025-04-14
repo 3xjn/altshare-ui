@@ -16,22 +16,20 @@ import {
     RefreshCcw,
     Settings,
     Share,
+    VenetianMask,
+    Lock,
 } from "lucide-react";
 import {
     Dialog,
     DialogContent,
     DialogDescription,
-    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { Account, useAccountStore } from "@/stores/AccountStore";
-import { decrypt, encrypt } from "@/utils/encryption_v2";
+import { decrypt, encrypt } from "@/utils/encryption";
 import { accountApi } from "@/services/AccountApi";
 import { useToast } from "@/hooks/use-toast";
 import { PasswordPrompt } from "@/components/PasswordPrompt";
@@ -48,17 +46,22 @@ import { SignalRService } from "@/services/SignalR";
 import { CircularProgress } from "@/components/ui/progress";
 import { PeerService } from "@/services/PeerService";
 import { RankSelect } from "@/components/rank-select";
+import AddAccountDialog from "@/components/AddAccountDialog";
+import { Stack } from "@/components/ui/stack";
+import { getImageFromRank } from "@/utils/getImageFromRank";
+import { randomUUID } from "crypto";
 
 export function Accounts() {
     const {
         isAuthenticated,
-        loadAccounts,
-        decryptedAccounts,
         currentPassword,
         setCurrentPassword,
         encryptedMasterKey,
-        logout,
+        decryptedAccounts,
+        loadAccounts,
         loadSharedAccounts,
+        getRanks,
+        logout,
     } = useAccountStore();
     const [isLoading, setIsLoading] = useState(true);
     const [createOpen, setCreateOpen] = useState(false);
@@ -82,6 +85,7 @@ export function Accounts() {
                 if (currentPassword) {
                     await loadAccounts();
                     await loadSharedAccounts();
+                    getRanks();
                 }
             } catch (error) {
                 console.error("Failed to load accounts:", error);
@@ -125,6 +129,8 @@ export function Accounts() {
         try {
             await loadAccounts();
             await loadSharedAccounts();
+            await getRanks();
+
             toast({
                 title: "Success",
                 description: "Accounts refreshed successfully.",
@@ -149,6 +155,7 @@ export function Accounts() {
             username: formData.get("username") as string,
             password: formData.get("password") as string,
             notes: (formData.get("notes") as string) || "",
+            game: (formData.get("game") as string) || "",
         };
 
         try {
@@ -200,6 +207,7 @@ export function Accounts() {
         });
 
         await loadAccounts();
+        getRanks();
 
         toast({
             title: "Success",
@@ -228,6 +236,7 @@ export function Accounts() {
         });
 
         await loadAccounts();
+        getRanks();
 
         toast({
             title: "Success",
@@ -521,7 +530,7 @@ export function Accounts() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="w-[200px]">
+                                    <TableHead className="w-[75px]">
                                         Game
                                     </TableHead>
                                     <TableHead className="w-[200px]">
@@ -530,7 +539,7 @@ export function Accounts() {
                                     <TableHead className="w-[200px]">
                                         Password
                                     </TableHead>
-                                    <TableHead className="w-[120px]">
+                                    <TableHead className="w-[200px]">
                                         Rank
                                     </TableHead>
                                     <TableHead>Notes</TableHead>
@@ -578,8 +587,7 @@ export function Accounts() {
                                                     No accounts yet
                                                 </h3>
                                                 <p className="text-sm text-muted-foreground">
-                                                    Add your first account to
-                                                    get started
+                                                    Add an account to get started
                                                 </p>
                                             </div>
                                         </TableCell>
@@ -592,9 +600,14 @@ export function Accounts() {
                                         >
                                             <TableCell>
                                                 <img
-                                                    className="w-10 h-10"
-                                                    src="./images/marvel-rivals.png"
-                                                ></img>
+                                                    className="w-10 h-10 rounded-lg"
+                                                    src={
+                                                        account.game ===
+                                                        "Marvel Rivals"
+                                                            ? "./images/marvel-rivals.png"
+                                                            : ""
+                                                    }
+                                                />
                                             </TableCell>
                                             <TableCell className="font-medium">
                                                 <TextLabel
@@ -610,20 +623,36 @@ export function Accounts() {
                                                 />
                                             </TableCell>
                                             <TableCell>
-                                                <RankSelect
-                                                    rank={
-                                                        account.notes as
-                                                            | "BRONZE"
-                                                            | "SILVER"
-                                                            | "GOLD"
-                                                            | "PLATINUM"
-                                                            | "DIAMOND"
-                                                            | "GRANDMASTER"
-                                                            | "CELESTIAL"
-                                                            | "ETERNITY"
-                                                            | "ONE ABOVE ALL"
-                                                    }
-                                                />
+                                                <Stack
+                                                    direction="row"
+                                                    align="center"
+                                                    spacing="small"
+                                                >
+                                                    {account.isLoadingRank ? (
+                                                        <CircularProgress />
+                                                    ) : (
+                                                        account.rank && (
+                                                            <img
+                                                                className="w-[30px] h-[30px] object-cover rounded-md"
+                                                                src={getImageFromRank(
+                                                                    account.rank
+                                                                )}
+                                                                alt={
+                                                                    account.rank
+                                                                }
+                                                            />
+                                                        )
+                                                    )}
+                                                    {!account.isLoadingRank &&
+                                                        (account.rank ? (
+                                                            <span>
+                                                                {account.rank}
+                                                            </span>
+                                                        ) : (
+                                                            // <Lock color="gray" />
+                                                            <></>
+                                                        ))}
+                                                </Stack>
                                             </TableCell>
                                             <TableCell>
                                                 <ExpandableNotes
@@ -682,66 +711,11 @@ export function Accounts() {
                     </div>
                 </div>
 
-                <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-                    <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                            <DialogTitle>
-                                {editingAccount
-                                    ? "Edit account"
-                                    : "Add account"}
-                            </DialogTitle>
-                            <DialogDescription>
-                                {editingAccount
-                                    ? "Update your account credentials."
-                                    : "Add your account credentials to be securely stored."}
-                            </DialogDescription>
-                        </DialogHeader>
-                        <form onSubmit={handleSubmit} className="space-y-6">
-                            <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="username">Username</Label>
-                                    <Input
-                                        id="username"
-                                        name="username"
-                                        required
-                                        defaultValue={editingAccount?.username}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="password">Password</Label>
-                                    <Input
-                                        id="password"
-                                        name="password"
-                                        type="password"
-                                        required
-                                        defaultValue={editingAccount?.password}
-                                        showPasswordToggle
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="notes">Notes</Label>
-                                    <Textarea
-                                        id="notes"
-                                        name="notes"
-                                        defaultValue={editingAccount?.notes}
-                                        className="min-h-[100px] resize-none"
-                                    />
-                                </div>
-                            </div>
-                            <DialogFooter>
-                                <Button
-                                    type="submit"
-                                    className="w-full"
-                                    variant="secondary"
-                                >
-                                    {editingAccount
-                                        ? "Update account"
-                                        : "Add account"}
-                                </Button>
-                            </DialogFooter>
-                        </form>
-                    </DialogContent>
-                </Dialog>
+                <AddAccountDialog
+                    open={createOpen}
+                    setOpen={setCreateOpen}
+                    handleSubmit={handleSubmit}
+                />
 
                 <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
                     <DialogContent className="max-w-md">

@@ -1,6 +1,16 @@
 import { accountApi } from '@/services/AccountApi';
-import { decrypt } from '@/utils/encryption_v2';
+import { decrypt } from '@/utils/encryption';
+import { LocalStorageStore } from '@/utils/localStorageCache';
 import { create } from 'zustand';
+
+const rankStore = new LocalStorageStore({
+    storeName: 'userRanks',
+    defaultTTL: 15 * 60 * 1000  // 15 minutes
+});
+
+export interface RankCache {
+    rank: string;
+}
 
 export interface Account {
     id: string;
@@ -9,6 +19,8 @@ export interface Account {
     notes?: string;
     rank?: string;
     isShared?: boolean;
+    game?: "Marvel Rivals";
+    isLoadingRank: boolean;
 }
 
 export interface EncryptedAccount {
@@ -30,6 +42,9 @@ interface AccountContextType {
     decryptedAccounts: Account[];
     loadAccounts: () => Promise<void>;
     loadSharedAccounts: () => Promise<void>;
+    getRanks: () => Promise<void>;
+
+    updateAccount: (account: Account) => void;
 
     logout: () => void;
 }
@@ -65,8 +80,8 @@ export const useAccountStore = create<AccountContextType>((set) => ({
 
         const accounts: Account[] = await Promise.all(response.map(async (encryptedAccount) => {
             const decryptedJson = await decrypt(encryptedAccount.encryptedData, decryptedKey);
-            console.log(decryptedJson)
-            return JSON.parse(decryptedJson) ?? null;
+            console.log(`Shared Account Decrypted JSON - ${decryptedJson}`)
+            return JSON.parse(decryptedJson) ?? [];
         }))
 
         set({
@@ -84,13 +99,53 @@ export const useAccountStore = create<AccountContextType>((set) => ({
         const response = await accountApi.getSharedAccounts();
         const accounts: Account[] = await Promise.all(response.encryptedAccounts.map(async (encryptedAccount) => {
             const decryptedJson = await decrypt(encryptedAccount.encryptedData, decryptedKey);
-            return JSON.parse(decryptedJson) ?? null;
+            console.log(`Shared Account Decrypted JSON - ${decryptedJson}`)
+            return JSON.parse(decryptedJson) ?? [];
         }))
 
         set((state) => ({
             decryptedAccounts: [...state.decryptedAccounts, ...accounts]
         }));
     },
+    getRanks: async () => {
+        await Promise.all(useAccountStore.getState().decryptedAccounts.map(async account => {
+            if (account.game == "Marvel Rivals") {
+                useAccountStore.getState().updateAccount({ ...account, isLoadingRank: true })
+
+                const cache = await rankStore.get<RankCache>(account.username)
+                if (cache) {
+                    console.log("hit cache for", account.username, cache.rank)
+                    useAccountStore.getState().updateAccount({ ...account, rank: cache.rank, isLoadingRank: false })
+                };
+
+                const response = await accountApi.getRank(account.username);
+                console.log("response", response)
+
+                try {
+                    if (response) {
+                        rankStore.set<RankCache>(account.username, {
+                            rank: response.rank
+                        });
+                        useAccountStore.getState().updateAccount({ ...account, rank: response.rank, isLoadingRank: false });
+                    }
+                } catch {
+                    useAccountStore.getState().updateAccount({ ...account, isLoadingRank: false })
+                }
+            }
+
+            // useAccountStore.getState().updateAccount({ ...account})
+        }));
+    },
+
+    updateAccount: (account) => set((state) => ({
+        decryptedAccounts: state.decryptedAccounts.map(acc => {
+            if (acc.username == account.username) {
+                return account;
+            }
+
+            return acc;
+        })
+    })),
 
     logout: () => set(() => ({
         isAuthenticated: false,

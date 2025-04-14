@@ -17,7 +17,7 @@ import * as yup from "yup";
 import YupPassword from "yup-password";
 import { AccountCreationDto } from "@/models/UserAccount";
 import { authApi } from "@/services/AuthApi";
-import { setupUserEncryption } from "@/utils/encryption_v2";
+import { setupUserEncryption } from "@/utils/encryption";
 import { useAccountStore } from "@/stores/AccountStore";
 YupPassword(yup);
 
@@ -69,7 +69,7 @@ const MyForm = () => {
         resolver: yupResolver(schema),
     });
 
-    const { setIsAuthenticated, setEncryptedMasterKey } = useAccountStore();
+    const { setIsAuthenticated, setCurrentPassword, setEncryptedMasterKey } = useAccountStore();
 
     const onSubmit: SubmitHandler<AccountCreationDto> = async (data) => {
         try {
@@ -116,6 +116,7 @@ const MyForm = () => {
                 });
 
                 setEncryptedMasterKey(response.masterKeyEncrypted);
+                setCurrentPassword(data.password);
 
                 // validate the new token
                 const isValid = await authApi.validate();

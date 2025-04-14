@@ -43,23 +43,23 @@ export default defineConfig({
         },
         proxy: {
             '/api/auth': {
-                target: 'https://asher.local:7006',
+                target: 'https://localhost:7006',
                 changeOrigin: true,
                 secure: false
             },
             '/api/account': {
-                target: 'https://asher.local:7006',
+                target: 'https://localhost:7006',
                 changeOrigin: true,
                 secure: false
             },
             '/api/hub': {
-                target: 'https://asher.local:7006',
+                target: 'https://localhost:7006',
                 changeOrigin: true,
                 secure: false,
                 ws: true
             },
             '/api/invite': {
-                target: 'https://asher.local:7006',
+                target: 'https://localhost:7006',
                 changeOrigin: true,
                 secure: false
             }
