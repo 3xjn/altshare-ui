@@ -1,14 +1,15 @@
 import { CircularProgress } from "@/components/ui/progress";
 import { SignalRService } from "@/services/SignalR";
 import { PeerService } from "@/services/PeerService";
-import { useAccountContext } from "@/stores/AccountProvider";
+import { useAccountStore } from "@/stores/AccountStore";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { arrayBufferToBase64, base64ToArrayBuffer, encryptExistingMasterKey } from "@/utils/crypto";
+import { getCurrentUserEmail } from "@/utils/getJwtClaim";
 
 export const Invite: React.FC = () => {
-    const { isAuthenticated, currentPassword, getCurrentUserEmail } = useAccountContext();
+    const { isAuthenticated, currentPassword } = useAccountStore();
     const navigate = useNavigate();
     const { toast } = useToast();
     const [searchParams] = useSearchParams();

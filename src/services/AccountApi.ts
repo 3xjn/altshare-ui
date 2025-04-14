@@ -2,7 +2,6 @@ import { ApiService } from './ApiService';
 
 interface AddAccountRequest {
     encryptedData: string;
-    userKey: string;
 }
 
 interface EncryptedAccount {
@@ -32,10 +31,14 @@ interface SharedAccountResponse {
     }[];
 }
 
+interface RankResponse {
+    rank: string;
+}
+
 export class AccountApi extends ApiService {
     route: string = "/api/account"
 
-    async getAccounts(): Promise<{ encryptedAccounts: EncryptedAccount[] }> {
+    async getAccounts(): Promise<EncryptedAccount[]> {
         const response = await this.api.get(this.route);
         return response.data;
     }
@@ -58,6 +61,15 @@ export class AccountApi extends ApiService {
 
     async getSharedAccounts(): Promise<SharedAccountResponse> {
         const response = await this.api.get(`${this.route}/share`);
+        return response.data;
+    }
+
+    async getRank(username: string): Promise<RankResponse> {
+        const response = await this.api.get(`${this.route}/rank?username=${username}`, {
+            validateStatus: function (status) {
+                return status <= 500;
+            }
+        });
         return response.data;
     }
 }

@@ -17,14 +17,22 @@ import * as yup from "yup";
 import YupPassword from "yup-password";
 import { AccountCreationDto } from "@/models/UserAccount";
 import { authApi } from "@/services/AuthApi";
-import { setupUserEncryption } from "@/utils/crypto";
-import { useAccountContext } from "@/stores/AccountProvider";
+import { setupUserEncryption } from "@/utils/encryption";
+import { useAccountStore } from "@/stores/AccountStore";
 YupPassword(yup);
 
 import Cookies from "js-cookie";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
-import { AxiosResponse } from "axios";
+
+// Define a specific error type with response data
+interface ApiError extends Error {
+    response?: {
+        data?: {
+            error?: string;
+        };
+    };
+}
 
 const schema = yup.object().shape({
     username: yup
@@ -61,35 +69,54 @@ const MyForm = () => {
         resolver: yupResolver(schema),
     });
 
-    const { setIsAuthenticated, setMasterKeyParams } = useAccountContext();
+    const { setIsAuthenticated, setCurrentPassword, setEncryptedMasterKey } = useAccountStore();
 
     const onSubmit: SubmitHandler<AccountCreationDto> = async (data) => {
         try {
-            const { securityParams } = await setupUserEncryption(data.password);
+            console.log(
+                "Starting registration process with password:",
+                data.password.substring(0, 1) +
+                    "*".repeat(data.password.length - 1)
+            );
+
+            console.log("Initializing encryption...");
+
+            let encryptedMasterKey;
+            try {
+                encryptedMasterKey = await setupUserEncryption(data.password);
+                console.log(
+                    "Encryption successful:",
+                    encryptedMasterKey.substring(0, 10) + "..."
+                );
+            } catch (err) {
+                if (err instanceof Error) {
+                    toast({
+                        variant: "destructive",
+                        title: "Encryption Setup Error",
+                        description: err.message, 
+                    });
+                }
+                return;
+            }
+
+            console.log("Sending registration request...");
             const response = await authApi.register({
                 email: data.email,
                 password: data.password,
                 username: data.username,
                 passwordConfirmation: data.passwordConfirmation,
-                masterKeyEncrypted: securityParams.encryptedMasterKey,
-                iv: securityParams.iv,
-                salt: securityParams.salt,
-                tag: securityParams.tag,
+                masterKeyEncrypted: JSON.stringify(encryptedMasterKey),
             });
 
             if (response.token) {
                 Cookies.set("token", response.token, {
                     path: "/",
                     sameSite: "strict",
-                    expires: 1, // 1 day
+                    expires: 1,
                 });
 
-                setMasterKeyParams({
-                    masterKeyEncrypted: response.masterKeyEncrypted,
-                    masterKeyIv: response.masterKeyIv,
-                    salt: response.salt,
-                    tag: response.tag ?? "",
-                });
+                setEncryptedMasterKey(response.masterKeyEncrypted);
+                setCurrentPassword(data.password);
 
                 // validate the new token
                 const isValid = await authApi.validate();
@@ -102,14 +129,21 @@ const MyForm = () => {
             }
         } catch (error) {
             console.error("Registration failed:", error);
+            let errorMessage = "An unknown error occurred";
+
+            if (error instanceof Error) {
+                errorMessage = error.message;
+
+                const apiError = error as ApiError;
+                if (apiError.response?.data?.error) {
+                    errorMessage = apiError.response.data.error;
+                }
+            }
+
             toast({
                 variant: "destructive",
                 title: "Registration Failed",
-                description:
-                    error instanceof Error
-                        ? (error as never as { response: AxiosResponse })
-                              .response.data.error
-                        : "An unknown error occurred",
+                description: errorMessage,
             });
         }
     };
@@ -196,13 +230,11 @@ export function SignupForm({
         <div className={cn("flex flex-col gap-6", className)} {...props}>
             <Card>
                 <CardHeader>
-                    <img
-                        className="rounded-md mx-[24px] mb-2 scale-75"
-                        src="./images/banner-light.png"
-                    />
-                    <CardTitle className="text-2xl">Sign up</CardTitle>
+                    <CardTitle className="text-2xl">
+                        Sign up to AltShare
+                    </CardTitle>
                     <CardDescription>
-                        Enter your information below to create your account
+                        Enter your email below to create your account
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

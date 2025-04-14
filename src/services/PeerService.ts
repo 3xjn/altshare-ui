@@ -89,7 +89,6 @@ export class PeerService {
         this.peer?.send(data);
     }
 
-    // Type-safe handler registration
     public registerHandler<T extends keyof MessagePayloads>(
         action: T, 
         handler: MessageHandler<T>
@@ -97,7 +96,6 @@ export class PeerService {
         this.messageHandlers.set(action, handler as MessageHandler<keyof MessagePayloads>);
     }
 
-    // Type-safe message sending
     public sendMessage<T extends keyof MessagePayloads>(
         action: T, 
         payload: MessagePayloads[T]

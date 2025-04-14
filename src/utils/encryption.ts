@@ -1,162 +1,135 @@
-import { AccountData } from '@/models/SharedAccount';
-import { arrayBufferToBase64, base64ToArrayBuffer } from './crypto';
+import CryptoJS from 'crypto-js';
 
-interface MasterKeyParams {
-    masterKeyEncrypted: string;
-    masterKeyIv: string;
+export interface EncryptedData {
+    encryptedData: string;
+    iv: string;
     salt: string;
-    tag: string;
 }
 
-export async function encryptAccountData(
-    accountData: AccountData, 
-    password: string,
-    masterKeyParams: MasterKeyParams
-) {
-    const masterKey = await decryptMasterKey(
-        masterKeyParams.masterKeyEncrypted,
-        masterKeyParams.masterKeyIv,
-        masterKeyParams.salt,
-        masterKeyParams.tag,
-        password
-    );
+// Convert string to base64
+export const toBase64 = (str: string): string => {
+    return CryptoJS.enc.Utf8.parse(str).toString(CryptoJS.enc.Base64);
+};
 
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const encoder = new TextEncoder();
-    
-    const encrypted = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv, tagLength: 128 },
-        masterKey,
-        encoder.encode(JSON.stringify([accountData]))
-    );
+// Convert base64 to string
+export const fromBase64 = (str: string): string => {
+    return CryptoJS.enc.Base64.parse(str).toString(CryptoJS.enc.Utf8);
+};
 
-    // The encrypted result already includes the tag at the end
-    return {
-        encryptedData: arrayBufferToBase64(encrypted),
-        userKey: arrayBufferToBase64(iv)
-    };
-}
+// Generate a random IV
+export const generateIV = (): string => {
+    return CryptoJS.lib.WordArray.random(128 / 8).toString(CryptoJS.enc.Base64);
+};
 
-export async function decryptAccountData(
-    encryptedData: string,
-    userKey: string,
-    password: string,
-    masterKeyParams: MasterKeyParams
-): Promise<AccountData> {
+// Generate a random salt
+export const generateSalt = (): string => {
+    return CryptoJS.lib.WordArray.random(128 / 8).toString(CryptoJS.enc.Base64);
+};
+
+export async function encrypt(plaintext: string, password: string): Promise<string> {
     try {
-        const masterKey = await decryptMasterKey(
-            masterKeyParams.masterKeyEncrypted,
-            masterKeyParams.masterKeyIv,
-            masterKeyParams.salt,
-            masterKeyParams.tag,
-            password
-        );
-
-        const decrypted = await decryptWithMasterKey(encryptedData, userKey, masterKey);
-        return JSON.parse(decrypted)[0];
-    } catch (error) {
-        console.error('Decryption failed:', error);
-        throw error;
-    }
-}
-
-export async function decryptMasterKey(
-    encryptedMasterKey: string,
-    iv: string,
-    salt: string,
-    tag: string | undefined | null,
-    password: string
-): Promise<CryptoKey> {
-    try {
-        // Convert base64 strings to bytes
-        const encryptedBytes = base64ToArrayBuffer(encryptedMasterKey);
-        const ivBytes = base64ToArrayBuffer(iv);
-        const saltBytes = base64ToArrayBuffer(salt);
-        
-        // Handle missing or empty tag
-        let combinedCiphertext: Uint8Array;
-        if (!tag) {
-            // If no tag, assume the encryptedMasterKey already includes the tag
-            combinedCiphertext = new Uint8Array(encryptedBytes);
-        } else {
-            const tagBytes = base64ToArrayBuffer(tag);
-            // Validate lengths
-            if (tagBytes.byteLength !== 16) throw new Error(`Invalid tag length: ${tagBytes.byteLength}`);
-            
-            // Create combined ciphertext + tag buffer
-            combinedCiphertext = new Uint8Array(encryptedBytes.byteLength + tagBytes.byteLength);
-            combinedCiphertext.set(new Uint8Array(encryptedBytes), 0);
-            combinedCiphertext.set(new Uint8Array(tagBytes), encryptedBytes.byteLength);
-        }
-
-        // Validate other lengths
-        if (ivBytes.byteLength !== 12) throw new Error(`Invalid IV length: ${ivBytes.byteLength}`);
-        if (saltBytes.byteLength !== 16) throw new Error(`Invalid salt length: ${saltBytes.byteLength}`);
-
-        // Derive key from password
-        const encoder = new TextEncoder();
-        const passwordKey = await crypto.subtle.importKey(
-            'raw',
-            encoder.encode(password),
-            'PBKDF2',
-            false,
-            ['deriveKey']
-        );
-
-        const derivedKey = await crypto.subtle.deriveKey(
-            {
-                name: 'PBKDF2',
-                salt: saltBytes,
-                iterations: 100000,
-                hash: 'SHA-256'
-            },
-            passwordKey,
-            { name: 'AES-GCM', length: 256 },
-            true,
-            ['encrypt', 'decrypt']
-        );
-
-        // Decrypt master key
-        const decryptedKeyData = await crypto.subtle.decrypt(
-            {
-                name: 'AES-GCM',
-                iv: ivBytes,
-                tagLength: 128
-            },
-            derivedKey,
-            combinedCiphertext
-        );
-
-        // Import decrypted key
-        return crypto.subtle.importKey(
-            'raw',
-            decryptedKeyData,
-            { name: 'AES-GCM', length: 256 },
-            true,
-            ['encrypt', 'decrypt']
-        );
-    } catch (error) {
-        console.error('Master key decryption failed:', {
-            error,
-            encryptedMasterKey,
-            iv,
-            salt,
-            tag
+        const salt = CryptoJS.lib.WordArray.random(128 / 8);
+        const key = CryptoJS.PBKDF2(password, salt, {
+            keySize: 256 / 32,
+            iterations: 1000
         });
+        const iv = CryptoJS.lib.WordArray.random(128 / 8);
+        const encrypted = CryptoJS.AES.encrypt(plaintext, key, {
+            iv: iv,
+            padding: CryptoJS.pad.Pkcs7,
+            mode: CryptoJS.mode.CBC
+        });
+        
+        // Combine salt, IV, and encrypted content using Base64 encoding
+        const combinedData = CryptoJS.enc.Base64.stringify(
+            CryptoJS.lib.WordArray.create([
+                ...salt.words,
+                ...iv.words,
+                ...CryptoJS.enc.Base64.parse(encrypted.toString()).words
+            ])
+        );
+        
+        return combinedData;
+    } catch (error) {
+        console.error('Error encrypting:', error);
         throw error;
     }
 }
 
-export async function decryptWithMasterKey(
-    encryptedData: string,
-    iv: string,
-    masterKey: CryptoKey
-): Promise<string> {
-    const decrypted = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv: base64ToArrayBuffer(iv), tagLength: 128 },
-        masterKey,
-        base64ToArrayBuffer(encryptedData)
-    );
+export async function decrypt(cipherText: string, password: string): Promise<string> {
+    try {
+        // Decode the combined Base64 data
+        const combinedData = CryptoJS.enc.Base64.parse(cipherText);
+        
+        // Extract salt (first 16 bytes)
+        const salt = CryptoJS.lib.WordArray.create(combinedData.words.slice(0, 4));
+        
+        // Extract IV (next 16 bytes)
+        const iv = CryptoJS.lib.WordArray.create(combinedData.words.slice(4, 8));
+        
+        // Extract encrypted content (remaining bytes)
+        const encryptedWords = combinedData.words.slice(8);
+        const encrypted = CryptoJS.enc.Base64.stringify(
+            CryptoJS.lib.WordArray.create(encryptedWords)
+        );
+        
+        // Derive the key using the same salt and iterations
+        const key = CryptoJS.PBKDF2(password, salt, {
+            keySize: 256 / 32,
+            iterations: 1000
+        });
+        
+        // Decrypt
+        const decrypted = CryptoJS.AES.decrypt(encrypted, key, {
+            iv: iv,
+            padding: CryptoJS.pad.Pkcs7,
+            mode: CryptoJS.mode.CBC
+        });
+        
+        return decrypted.toString(CryptoJS.enc.Utf8);
+    } catch (error) {
+        console.error('Error decrypting:', error);
+        throw error;
+    }
+}
 
-    return new TextDecoder().decode(decrypted);
+export async function setupUserEncryption(password: string): Promise<string> {
+    try {
+        // Generate a random key (256 bits = 32 bytes)
+        const randomKey = CryptoJS.lib.WordArray.random(32);
+        const keyBase64 = randomKey.toString(CryptoJS.enc.Base64);
+        
+        return encrypt(keyBase64, password);
+    } catch (error) {
+        console.error('Error in setupUserEncryption:', error);
+        throw error;
+    }
+}
+
+export async function encryptPassword(password: string): Promise<string> {
+    try {
+        const hash = CryptoJS.SHA256(password);
+        return hash.toString(CryptoJS.enc.Base64);
+    } catch (error) {
+        console.error('Error encrypting password:', error);
+        throw error;
+    }
+}
+
+export async function encryptExistingMasterKey(base64Key: string, password: string): Promise<string> {
+    try {
+        return encrypt(base64Key, password);
+    } catch (error) {
+        console.error('Error encrypting existing master key:', error);
+        throw error;
+    }
+}
+
+export async function encryptAccountData(data: string, masterKey: string): Promise<string> {
+    try {
+        return encrypt(data, masterKey);
+    } catch (error) {
+        console.error('Error encrypting account data:', error);
+        throw error;
+    }
 }

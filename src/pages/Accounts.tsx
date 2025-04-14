@@ -15,27 +15,22 @@ import {
     Trash2,
     RefreshCcw,
     Settings,
-    Share,
+    Lock,
 } from "lucide-react";
 import {
     Dialog,
     DialogContent,
     DialogDescription,
-    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
-import { useAccountContext } from "@/stores/AccountProvider";
-import { decryptMasterKey, encryptAccountData } from "@/utils/encryption";
+import { Account, useAccountStore } from "@/stores/AccountStore";
+import { decrypt, encrypt } from "@/utils/encryption";
 import { accountApi } from "@/services/AccountApi";
 import { useToast } from "@/hooks/use-toast";
 import { PasswordPrompt } from "@/components/PasswordPrompt";
-import type { Account } from "@/stores/AccountProvider";
 import { ExpandableNotes } from "@/components/ui/expandable-notes";
 import {
     DropdownMenu,
@@ -48,18 +43,24 @@ import {
 import { SignalRService } from "@/services/SignalR";
 import { CircularProgress } from "@/components/ui/progress";
 import { PeerService } from "@/services/PeerService";
-import { arrayBufferToBase64, base64ToArrayBuffer } from "@/utils/crypto";
+import { RankSelect } from "@/components/rank-select";
+import AddAccountDialog from "@/components/AddAccountDialog";
+import { Stack } from "@/components/ui/stack";
+import { getImageFromRank } from "@/utils/getImageFromRank";
+import { randomUUID } from "crypto";
 
 export function Accounts() {
     const {
         isAuthenticated,
-        loadAccounts,
-        decryptedAccounts,
         currentPassword,
-        masterKeyParams,
-        logout,
+        setCurrentPassword,
+        encryptedMasterKey,
+        decryptedAccounts,
+        loadAccounts,
         loadSharedAccounts,
-    } = useAccountContext();
+        getRanks,
+        logout,
+    } = useAccountStore();
     const [isLoading, setIsLoading] = useState(true);
     const [createOpen, setCreateOpen] = useState(false);
     const [inviteOpen, setInviteOpen] = useState(false);
@@ -80,8 +81,9 @@ export function Accounts() {
         const initializeAccounts = async () => {
             try {
                 if (currentPassword) {
-                    await loadAccounts(currentPassword);
-                    await loadSharedAccounts(currentPassword);
+                    await loadAccounts();
+                    await loadSharedAccounts();
+                    getRanks();
                 }
             } catch (error) {
                 console.error("Failed to load accounts:", error);
@@ -123,8 +125,10 @@ export function Accounts() {
 
         setIsLoading(true);
         try {
-            await loadAccounts(currentPassword);
-            await loadSharedAccounts(currentPassword);
+            await loadAccounts();
+            await loadSharedAccounts();
+            await getRanks();
+
             toast({
                 title: "Success",
                 description: "Accounts refreshed successfully.",
@@ -149,10 +153,11 @@ export function Accounts() {
             username: formData.get("username") as string,
             password: formData.get("password") as string,
             notes: (formData.get("notes") as string) || "",
+            game: (formData.get("game") as string) || "",
         };
 
         try {
-            if (!currentPassword || !masterKeyParams) {
+            if (!currentPassword || !encryptedMasterKey) {
                 setShowPasswordPrompt(true);
                 return;
             }
@@ -160,7 +165,7 @@ export function Accounts() {
             if (editingAccount) {
                 await handleEditSubmit(accountData);
             } else {
-                await handleAdd(accountData);
+                await handleAddAccount(accountData);
             }
         } catch (error) {
             toast({
@@ -174,27 +179,33 @@ export function Accounts() {
         }
     };
 
-    const handleAdd = async (accountData: {
+    const handleAddAccount = async (accountData: {
         username: string;
         password: string;
         notes: string;
     }) => {
-        if (!currentPassword || !masterKeyParams) {
+        if (!currentPassword || !encryptedMasterKey) {
             throw new Error("Missing credentials");
         }
 
-        const { encryptedData, userKey } = await encryptAccountData(
-            accountData,
-            currentPassword,
-            masterKeyParams
+        const decryptedMasterKey = await decrypt(
+            encryptedMasterKey,
+            currentPassword
         );
+
+        const encryptedData = await encrypt(
+            JSON.stringify(accountData),
+            decryptedMasterKey
+        );
+
+        console.log("Encryption result:", { encryptedData });
 
         await accountApi.addAccount({
             encryptedData,
-            userKey,
         });
 
-        await loadAccounts(currentPassword);
+        await loadAccounts();
+        getRanks();
 
         toast({
             title: "Success",
@@ -209,22 +220,21 @@ export function Accounts() {
         password: string;
         notes: string;
     }) => {
-        if (!currentPassword || !masterKeyParams || !editingAccount?.id) {
+        if (!currentPassword || !encryptedMasterKey || !editingAccount?.id) {
             throw new Error("Missing credentials or account ID");
         }
 
-        const { encryptedData, userKey } = await encryptAccountData(
-            accountData,
-            currentPassword,
-            masterKeyParams
+        const encryptedData = await encrypt(
+            JSON.stringify(accountData),
+            currentPassword
         );
 
         await accountApi.editAccount(editingAccount.id, {
             encryptedData,
-            userKey,
         });
 
-        await loadAccounts(currentPassword);
+        await loadAccounts();
+        getRanks();
 
         toast({
             title: "Success",
@@ -237,7 +247,8 @@ export function Accounts() {
 
     const handlePasswordSubmit = async (enteredPassword: string) => {
         try {
-            await loadAccounts(enteredPassword);
+            setCurrentPassword(enteredPassword);
+            await loadAccounts();
             setShowPasswordPrompt(false);
 
             const form = document.querySelector("form") as HTMLFormElement;
@@ -252,7 +263,7 @@ export function Accounts() {
                 if (editingAccount) {
                     await handleEditSubmit(accountData);
                 } else {
-                    await handleAdd(accountData);
+                    await handleAddAccount(accountData);
                 }
             }
         } catch (error) {
@@ -282,7 +293,7 @@ export function Accounts() {
 
         try {
             await accountApi.deleteAccount(account.id);
-            await loadAccounts(currentPassword!);
+            await loadAccounts();
             toast({
                 title: "Success",
                 description: "Account deleted successfully.",
@@ -298,161 +309,143 @@ export function Accounts() {
     };
 
     const handleInviteClick = async () => {
-        if (isConnecting) return;
-
-        setInviteOpen(true);
-
-        // Add test mode check
-        if (searchParams.get("test") === "true") {
-            setIsConnecting(true);
-            setTimeout(() => {
-                setIsConnecting(false);
-                setInviteCode("test-invite-code-12345");
-            }, 1500); // Simulate loading delay
-            return;
-        }
-
-        try {
-            setIsConnecting(true);
-
-            const service = new SignalRService({
-                roomCreated: (roomId) => {
-                    setInviteCode(roomId);
-                    setIsConnecting(false);
-                    service.roomId = roomId;
-                    console.log("Room created:", roomId);
-                },
-                userJoined: () => {
-                    if (peer) {
-                        peer.initiate(true, service.roomId);
-                    }
-                },
-                receiveSignal: (signal) => {
-                    console.log("Received signal:", signal);
-                    if (peer) {
-                        peer.signal(signal);
-                    }
-                },
-            });
-
-            const peer = new PeerService(service);
-
-            peer.registerHandler("verification", async (payload) => {
-                if (!masterKeyParams || !currentPassword) {
-                    throw new Error(
-                        "Missing master key parameters or password"
-                    );
-                }
-
-                const decryptedMasterKey = await decryptMasterKey(
-                    masterKeyParams.masterKeyEncrypted,
-                    masterKeyParams.masterKeyIv,
-                    masterKeyParams.salt,
-                    masterKeyParams.tag,
-                    currentPassword
-                );
-
-                const rawKeyBuffer = await crypto.subtle.exportKey(
-                    "raw",
-                    decryptedMasterKey
-                );
-
-                const hmacKey = await crypto.subtle.importKey(
-                    "raw",
-                    rawKeyBuffer,
-                    { name: "HMAC", hash: "SHA-256" },
-                    false,
-                    ["sign"]
-                );
-
-                const theirSignature = base64ToArrayBuffer(payload.signature);
-                const mySignature = await crypto.subtle.sign(
-                    "HMAC",
-                    hmacKey,
-                    base64ToArrayBuffer(payload.token)
-                );
-
-                // Verify signatures match
-                const verified = new Uint8Array(theirSignature).every(
-                    (value, index) =>
-                        value === new Uint8Array(mySignature)[index]
-                );
-
-                if (verified) {
-                    // Create sharing relationship
-                    await accountApi.createSharingRelationship({
-                        sharedWithEmail: payload.encryptedKey.email,
-                        encryptedMasterKey:
-                            payload.encryptedKey.encryptedMasterKey,
-                        iv: payload.encryptedKey.iv,
-                        salt: payload.encryptedKey.salt,
-                        tag: payload.encryptedKey.tag,
-                    });
-
-                    peer.sendMessage("sharingConfirmation", {
-                        success: true,
-                    });
-
-                    toast({
-                        title: "Success",
-                        description: "Account sharing verified successfully.",
-                    });
-                    setShareOpen(false);
-                } else {
-                    toast({
-                        variant: "destructive",
-                        title: "Error",
-                        description: "Failed to verify account sharing.",
-                    });
-                }
-            });
-
-            peer.onConnect = () => {
-                console.log("share open");
-                setShareOpen(true);
-            };
-
-            await service.connect();
-            service.createRoom();
-
-            setSignalRService(service);
-            setPeer(peer);
-        } catch (error) {
-            console.error("Failed to establish connection:", error);
-            toast({
-                variant: "destructive",
-                title: "Connection Failed",
-                description:
-                    "Failed to establish connection. Please try again.",
-            });
-        }
+        // if (isConnecting) return;
+        // setInviteOpen(true);
+        // // Add test mode check
+        // if (searchParams.get('test') === 'true') {
+        //     setIsConnecting(true);
+        //     setTimeout(() => {
+        //         setIsConnecting(false);
+        //         setInviteCode('test-invite-code-12345');
+        //     }, 1500); // Simulate loading delay
+        //     return;
+        // }
+        // try {
+        //     setIsConnecting(true);
+        //     const service = new SignalRService({
+        //         roomCreated: (roomId) => {
+        //             setInviteCode(roomId);
+        //             setIsConnecting(false);
+        //             service.roomId = roomId;
+        //             console.log("Room created:", roomId);
+        //         },
+        //         userJoined: () => {
+        //             if (peer) {
+        //                 peer.initiate(true, service.roomId);
+        //             }
+        //         },
+        //         receiveSignal: (signal) => {
+        //             console.log("Received signal:", signal);
+        //             if (peer) {
+        //                 peer.signal(signal);
+        //             }
+        //         },
+        //     });
+        //     const peer = new PeerService(service);
+        //     peer.registerHandler('verification', async (payload) => {
+        //         if (!masterKeyParams || !currentPassword) {
+        //             throw new Error("Missing master key parameters or password");
+        //         }
+        //         const decryptedMasterKey = await decrypt(
+        //             masterKeyParams.masterKeyEncrypted,
+        //             masterKeyParams.masterKeyIv,
+        //             masterKeyParams.salt,
+        //             masterKeyParams.tag,
+        //             currentPassword
+        //         );
+        //         console.log("Decryption params:", {
+        //             masterKeyEncrypted: masterKeyParams.masterKeyEncrypted,
+        //             masterKeyIv: masterKeyParams.masterKeyIv,
+        //             salt: masterKeyParams.salt,
+        //             tag: masterKeyParams.tag,
+        //             password: currentPassword
+        //         });
+        //         const rawKeyBuffer = await crypto.subtle.exportKey(
+        //             "raw",
+        //             decryptedMasterKey
+        //         );
+        //         const hmacKey = await crypto.subtle.importKey(
+        //             'raw',
+        //             rawKeyBuffer,
+        //             { name: 'HMAC', hash: 'SHA-256' },
+        //             false,
+        //             ['sign']
+        //         );
+        //         const theirSignature = base64ToArrayBuffer(payload.signature);
+        //         const mySignature = await crypto.subtle.sign(
+        //             'HMAC',
+        //             hmacKey,
+        //             base64ToArrayBuffer(payload.token)
+        //         );
+        //         // Verify signatures match
+        //         const verified = new Uint8Array(theirSignature).every(
+        //             (value, index) => value === new Uint8Array(mySignature)[index]
+        //         );
+        //         if (verified) {
+        //             // Create sharing relationship
+        //             await accountApi.createSharingRelationship({
+        //                 sharedWithEmail: payload.encryptedKey.email,
+        //                 encryptedMasterKey: payload.encryptedKey.encryptedMasterKey,
+        //                 iv: payload.encryptedKey.iv,
+        //                 salt: payload.encryptedKey.salt,
+        //                 tag: payload.encryptedKey.tag
+        //             });
+        //             peer.sendMessage("sharingConfirmation", {
+        //                 success: true
+        //             })
+        //             toast({
+        //                 title: "Success",
+        //                 description: "Account sharing verified successfully.",
+        //             });
+        //             setShareOpen(false);
+        //         } else {
+        //             toast({
+        //                 variant: "destructive",
+        //                 title: "Error",
+        //                 description: "Failed to verify account sharing.",
+        //             });
+        //         }
+        //     });
+        //     peer.onConnect = () => {
+        //         console.log("share open")
+        //         setShareOpen(true);
+        //     };
+        //     await service.connect();
+        //     service.createRoom();
+        //     setSignalRService(service);
+        //     setPeer(peer);
+        // } catch (error) {
+        //     console.error("Failed to establish connection:", error);
+        //     toast({
+        //         variant: "destructive",
+        //         title: "Connection Failed",
+        //         description:
+        //             "Failed to establish connection. Please try again.",
+        //     });
+        // }
     };
 
     const handleAccountShare = async () => {
-        if (!masterKeyParams) {
-            throw Error("failed to find master key data.");
-        } else if (!currentPassword) {
-            throw Error("user is not authed");
-        }
-
-        const decryptedMasterKey = await decryptMasterKey(
-            masterKeyParams.masterKeyEncrypted,
-            masterKeyParams.masterKeyIv,
-            masterKeyParams.salt,
-            masterKeyParams.tag,
-            currentPassword
-        );
-
-        const rawKeyBuffer = await crypto.subtle.exportKey(
-            "raw",
-            decryptedMasterKey
-        );
-
-        peer!.sendMessage("masterKey", {
-            key: arrayBufferToBase64(rawKeyBuffer),
-        });
-
-        setShareOpen(false);
+        // if (!masterKeyParams) {
+        //     throw Error("failed to find master key data.");
+        // } else if (!currentPassword) {
+        //     throw Error("user is not authed");
+        // }
+        // const decryptedMasterKey = await decrypt(
+        //     masterKeyParams.masterKeyEncrypted,
+        //     masterKeyParams.masterKeyIv,
+        //     masterKeyParams.salt,
+        //     masterKeyParams.tag,
+        //     currentPassword
+        // );
+        // const rawKeyBuffer = await crypto.subtle.exportKey(
+        //     "raw",
+        //     decryptedMasterKey
+        // );
+        // peer!.sendMessage('masterKey', {
+        //     key: arrayBufferToBase64(rawKeyBuffer)
+        // });
+        // setShareOpen(false);
     };
 
     if (!isAuthenticated && !isTestMode) {
@@ -463,10 +456,7 @@ export function Accounts() {
         <div className="min-h-screen bg-background p-8">
             <div className="max-w-7xl mx-auto space-y-6">
                 <div className="flex items-center justify-between">
-                    <img
-                        className="rounded-md mb-2 w-[15%] h-[15%]"
-                        src="./images/banner-light.png"
-                    />
+                    <h1 className="text-3xl font-semibold">Accounts</h1>
                     <div className="flex items-center gap-3">
                         <Button
                             onClick={handleRefresh}
@@ -476,7 +466,7 @@ export function Accounts() {
                             <RefreshCcw />
                             Refresh
                         </Button>
-                        <Button
+                        {/* <Button
                             variant="outline"
                             size="sm"
                             onClick={handleInviteClick}
@@ -512,7 +502,7 @@ export function Accounts() {
                                     Invite
                                 </>
                             )}
-                        </Button>
+                        </Button> */}
                         <DropdownMenu>
                             <DropdownMenuTrigger>
                                 <Settings size={24} strokeWidth={1.5} />
@@ -533,21 +523,23 @@ export function Accounts() {
                     </div>
                 </div>
 
-                {/* <h1 className="text-3xl font-semibold">Accounts</h1> */}
                 <div className="rounded-lg border bg-white">
                     <div className="px-6">
                         <Table>
                             <TableHeader>
                                 <TableRow>
+                                    <TableHead className="w-[75px]">
+                                        Game
+                                    </TableHead>
                                     <TableHead className="w-[200px]">
                                         Username
                                     </TableHead>
                                     <TableHead className="w-[200px]">
                                         Password
                                     </TableHead>
-                                    {/* <TableHead className="w-[120px]">
+                                    <TableHead className="w-[200px]">
                                         Rank
-                                    </TableHead> */}
+                                    </TableHead>
                                     <TableHead>Notes</TableHead>
                                     <TableHead className="w-[100px] text-right">
                                         Actions
@@ -593,8 +585,7 @@ export function Accounts() {
                                                     No accounts yet
                                                 </h3>
                                                 <p className="text-sm text-muted-foreground">
-                                                    Add your first account to
-                                                    get started
+                                                    Add an account to get started
                                                 </p>
                                             </div>
                                         </TableCell>
@@ -605,6 +596,17 @@ export function Accounts() {
                                             key={index}
                                             className="group hover:bg-accent/5"
                                         >
+                                            <TableCell>
+                                                <img
+                                                    className="w-10 h-10 rounded-lg"
+                                                    src={
+                                                        account.game ===
+                                                        "Marvel Rivals"
+                                                            ? "./images/marvel-rivals.png"
+                                                            : ""
+                                                    }
+                                                />
+                                            </TableCell>
                                             <TableCell className="font-medium">
                                                 <TextLabel
                                                     content={account.username}
@@ -618,15 +620,37 @@ export function Accounts() {
                                                     showEyeButton
                                                 />
                                             </TableCell>
-                                            {/* <TableCell>
-                                                <TextLabel
-                                                    content={
-                                                        account.rank ||
-                                                        "Unknown"
-                                                    }
-                                                    showCopyButton
-                                                />
-                                            </TableCell> */}
+                                            <TableCell>
+                                                <Stack
+                                                    direction="row"
+                                                    align="center"
+                                                    spacing="small"
+                                                >
+                                                    {account.isLoadingRank ? (
+                                                        <CircularProgress />
+                                                    ) : (
+                                                        account.rank && (
+                                                            <img
+                                                                className="w-[30px] h-[30px] object-cover rounded-md"
+                                                                src={getImageFromRank(
+                                                                    account.rank
+                                                                )}
+                                                                alt={
+                                                                    account.rank
+                                                                }
+                                                            />
+                                                        )
+                                                    )}
+                                                    {!account.isLoadingRank &&
+                                                        (account.rank ? (
+                                                            <span>
+                                                                {account.rank}
+                                                            </span>
+                                                        ) : (
+                                                            <Lock color="gray" />
+                                                        ))}
+                                                </Stack>
+                                            </TableCell>
                                             <TableCell>
                                                 <ExpandableNotes
                                                     content={
@@ -684,65 +708,11 @@ export function Accounts() {
                     </div>
                 </div>
 
-                <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-                    <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                            <DialogTitle>
-                                {editingAccount
-                                    ? "Edit account"
-                                    : "Add account"}
-                            </DialogTitle>
-                            <DialogDescription>
-                                {editingAccount
-                                    ? "Update your account credentials."
-                                    : "Add your account credentials to be securely stored."}
-                            </DialogDescription>
-                        </DialogHeader>
-                        <form onSubmit={handleSubmit} className="space-y-6">
-                            <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="username">Username</Label>
-                                    <Input
-                                        id="username"
-                                        name="username"
-                                        required
-                                        defaultValue={editingAccount?.username}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="password">Password</Label>
-                                    <Input
-                                        id="password"
-                                        name="password"
-                                        type="password"
-                                        required
-                                        defaultValue={editingAccount?.password}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="notes">Notes</Label>
-                                    <Textarea
-                                        id="notes"
-                                        name="notes"
-                                        defaultValue={editingAccount?.notes}
-                                        className="min-h-[100px] resize-none"
-                                    />
-                                </div>
-                            </div>
-                            <DialogFooter>
-                                <Button
-                                    type="submit"
-                                    className="w-full"
-                                    variant="secondary"
-                                >
-                                    {editingAccount
-                                        ? "Update account"
-                                        : "Add account"}
-                                </Button>
-                            </DialogFooter>
-                        </form>
-                    </DialogContent>
-                </Dialog>
+                <AddAccountDialog
+                    open={createOpen}
+                    setOpen={setCreateOpen}
+                    handleSubmit={handleSubmit}
+                />
 
                 <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
                     <DialogContent className="max-w-md">

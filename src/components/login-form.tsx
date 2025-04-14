@@ -23,8 +23,8 @@ import {
     useSearchParams,
 } from "react-router-dom";
 import { Toast, useToast } from "@/hooks/use-toast";
-import { useAccountContext } from "@/stores/AccountProvider";
-import { authApi } from "@/services/AuthApi";
+import { useAccountStore } from "@/stores/AccountStore";
+import { authApi, isErrorMessage } from "@/services/AuthApi";
 import Cookies from "js-cookie";
 
 export interface LoginFormData {
@@ -72,17 +72,22 @@ const LoginFormFields = ({ onLoginSuccess }: LoginFormProps) => {
         try {
             const response = await authApi.login(data.email, data.password);
 
+            if (isErrorMessage(response)) {
+                toast({
+                    ...toastSettings,
+                    title: "Login Failed",
+                    description: response.message,
+                });
+                return;
+            }
+
             Cookies.set("token", response.token);
             onLoginSuccess({ ...data, response });
-        } catch (error: unknown) {
-            const errorMessage =
-                error instanceof Error
-                    ? error.message
-                    : "An unexpected error occurred";
+        } catch {
             toast({
                 ...toastSettings,
                 title: "Login Failed",
-                description: errorMessage,
+                description: "Unexpected error. Please try again later.",
             });
         }
     };
@@ -147,10 +152,10 @@ export function LoginForm({
     const { toast } = useToast();
     const {
         isAuthenticated,
-        setCurrentPassword,
-        setMasterKeyParams,
         setIsAuthenticated,
-    } = useAccountContext();
+        setCurrentPassword,
+        setEncryptedMasterKey,
+    } = useAccountStore();
 
     useEffect(() => {
         if (searchParams.get("expired") === "true") {
@@ -186,12 +191,7 @@ export function LoginForm({
     const handleLoginSuccess = (data: LoginSuccessData) => {
         setIsAuthenticated(true);
         setCurrentPassword(data.password);
-        setMasterKeyParams({
-            masterKeyEncrypted: data.response.masterKeyEncrypted,
-            masterKeyIv: data.response.masterKeyIv,
-            salt: data.response.salt,
-            tag: data.response.tag || "",
-        });
+        setEncryptedMasterKey(data.response.masterKeyEncrypted);
 
         navigate("/", { replace: true });
     };
@@ -199,14 +199,10 @@ export function LoginForm({
     return (
         <div className={cn("flex flex-col gap-6", className)} {...props}>
             <Card>
-                <CardHeader className="pt-6">
-                    <img
-                        className="rounded-md mx-[24px] mb-2 scale-75"
-                        src="./images/banner-light.png"
-                    />
+                <CardHeader>
                     <CardTitle className="text-2xl">Login</CardTitle>
                     <CardDescription>
-                        Enter your information below to login to your account
+                        Enter your email below to login to your account
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
