@@ -15,8 +15,6 @@ import {
     Trash2,
     RefreshCcw,
     Settings,
-    Share,
-    VenetianMask,
     Lock,
 } from "lucide-react";
 import {
@@ -649,8 +647,7 @@ export function Accounts() {
                                                                 {account.rank}
                                                             </span>
                                                         ) : (
-                                                            // <Lock color="gray" />
-                                                            <></>
+                                                            <Lock color="gray" />
                                                         ))}
                                                 </Stack>
                                             </TableCell>

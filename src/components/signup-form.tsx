@@ -105,7 +105,7 @@ const MyForm = () => {
                 password: data.password,
                 username: data.username,
                 passwordConfirmation: data.passwordConfirmation,
-                masterKeyEncrypted: encryptedMasterKey,
+                masterKeyEncrypted: JSON.stringify(encryptedMasterKey),
             });
 
             if (response.token) {

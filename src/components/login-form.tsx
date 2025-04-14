@@ -24,7 +24,7 @@ import {
 } from "react-router-dom";
 import { Toast, useToast } from "@/hooks/use-toast";
 import { useAccountStore } from "@/stores/AccountStore";
-import { authApi } from "@/services/AuthApi";
+import { authApi, isErrorMessage } from "@/services/AuthApi";
 import Cookies from "js-cookie";
 
 export interface LoginFormData {
@@ -72,17 +72,22 @@ const LoginFormFields = ({ onLoginSuccess }: LoginFormProps) => {
         try {
             const response = await authApi.login(data.email, data.password);
 
+            if (isErrorMessage(response)) {
+                toast({
+                    ...toastSettings,
+                    title: "Login Failed",
+                    description: response.message,
+                });
+                return;
+            }
+
             Cookies.set("token", response.token);
             onLoginSuccess({ ...data, response });
-        } catch (error: unknown) {
-            const errorMessage =
-                error instanceof Error
-                    ? error.message
-                    : "An unexpected error occurred";
+        } catch {
             toast({
                 ...toastSettings,
                 title: "Login Failed",
-                description: errorMessage,
+                description: "Unexpected error. Please try again later.",
             });
         }
     };
@@ -149,7 +154,7 @@ export function LoginForm({
         isAuthenticated,
         setIsAuthenticated,
         setCurrentPassword,
-        setEncryptedMasterKey
+        setEncryptedMasterKey,
     } = useAccountStore();
 
     useEffect(() => {
@@ -186,8 +191,8 @@ export function LoginForm({
     const handleLoginSuccess = (data: LoginSuccessData) => {
         setIsAuthenticated(true);
         setCurrentPassword(data.password);
-        setEncryptedMasterKey(data.response.masterKeyEncrypted)
-        
+        setEncryptedMasterKey(data.response.masterKeyEncrypted);
+
         navigate("/", { replace: true });
     };
 
