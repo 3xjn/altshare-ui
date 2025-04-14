@@ -3,7 +3,7 @@ FROM oven/bun:latest AS builder
 WORKDIR /app
 
 # Copy package files and install dependencies
-COPY package.json package-lock.json* .npmrc ./
+COPY package.json bun.lock ./
 RUN bun i
 
 # Copy the rest of the project files
