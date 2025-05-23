@@ -21,10 +21,17 @@ import {
 import { Dispatch, SetStateAction, useState } from "react";
 import { Stack } from "./ui/stack";
 
+interface DefaultValues {
+    game: string;
+    username: string;
+    password: string;
+    notes: string;
+}
 interface AddAccountDialog {
     open: boolean;
     setOpen: Dispatch<SetStateAction<boolean>>;
     handleSubmit: React.FormEventHandler<HTMLFormElement> | undefined;
+    // defaultValues: DefaultValues;
 }
 
 const games = { "Marvel Rivals": "./images/marvel-rivals.png" };
@@ -33,6 +40,7 @@ export default function AddAccountDialog({
     open,
     setOpen,
     handleSubmit,
+    // defaultValues,
 }: AddAccountDialog) {
     const [isRivals, setIsRivals] = useState(false);
 
@@ -53,6 +61,7 @@ export default function AddAccountDialog({
                                 onValueChange={(value) =>
                                     setIsRivals(value == "Marvel Rivals")
                                 }
+                                // value={defaultValues.game}
                                 name="game"
                             >
                                 <SelectTrigger className="w-full py-5">
@@ -93,7 +102,12 @@ export default function AddAccountDialog({
                             <Label htmlFor="username">
                                 {isRivals ? "Username (IGN)" : "Username"}
                             </Label>
-                            <Input id="username" name="username" required />
+                            <Input
+                                id="username"
+                                name="username"
+                                // value={defaultValues.username}
+                                required
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="password">Password</Label>
@@ -101,6 +115,7 @@ export default function AddAccountDialog({
                                 id="password"
                                 name="password"
                                 type="password"
+                                // value={defaultValues.password}
                                 required
                                 showPasswordToggle
                             />
@@ -110,6 +125,7 @@ export default function AddAccountDialog({
                             <Textarea
                                 id="notes"
                                 name="notes"
+                                // value={defaultValues.notes}
                                 className="min-h-[100px] resize-none"
                             />
                         </div>

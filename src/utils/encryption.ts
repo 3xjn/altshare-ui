@@ -6,6 +6,14 @@ export interface EncryptedData {
     salt: string;
 }
 
+export interface DecryptionResult {
+    data: string;
+    isUtf8Valid: boolean;
+}
+
+// Format version flag to distinguish between encryption methods
+const ENCRYPTION_VERSION = 1; // Version 1 = UTF-8 encoding of both password and plaintext
+
 // Convert string to base64
 export const toBase64 = (str: string): string => {
     return CryptoJS.enc.Utf8.parse(str).toString(CryptoJS.enc.Base64);
@@ -29,18 +37,25 @@ export const generateSalt = (): string => {
 export async function encrypt(plaintext: string, password: string): Promise<string> {
     try {
         const salt = CryptoJS.lib.WordArray.random(128 / 8);
-        const key = CryptoJS.PBKDF2(password, salt, {
+        // Parse password as UTF-8
+        const passwordUtf8 = CryptoJS.enc.Utf8.parse(password);
+        const key = CryptoJS.PBKDF2(passwordUtf8, salt, {
             keySize: 256 / 32,
             iterations: 1000
         });
         const iv = CryptoJS.lib.WordArray.random(128 / 8);
-        const encrypted = CryptoJS.AES.encrypt(plaintext, key, {
+        
+        // Always ensure plaintext is properly UTF-8 encoded for consistency
+        const plaintextUtf8 = CryptoJS.enc.Utf8.parse(plaintext);
+        
+        const encrypted = CryptoJS.AES.encrypt(plaintextUtf8, key, {
             iv: iv,
             padding: CryptoJS.pad.Pkcs7,
             mode: CryptoJS.mode.CBC
         });
         
-        // Combine salt, IV, and encrypted content using Base64 encoding
+        // We'll use the legacy format (without version flag) for better compatibility
+        // Until all accounts are migrated
         const combinedData = CryptoJS.enc.Base64.stringify(
             CryptoJS.lib.WordArray.create([
                 ...salt.words,
@@ -56,37 +71,89 @@ export async function encrypt(plaintext: string, password: string): Promise<stri
     }
 }
 
-export async function decrypt(cipherText: string, password: string): Promise<string> {
+export async function decrypt(cipherText: string, password: string): Promise<DecryptionResult> {
     try {
         // Decode the combined Base64 data
         const combinedData = CryptoJS.enc.Base64.parse(cipherText);
         
-        // Extract salt (first 16 bytes)
-        const salt = CryptoJS.lib.WordArray.create(combinedData.words.slice(0, 4));
+        // Check if we have a version flag (version 1+)
+        // If first word is ENCRYPTION_VERSION, it's a versioned format
+        const hasVersion = combinedData.words.length > 0 && combinedData.words[0] === ENCRYPTION_VERSION;
         
-        // Extract IV (next 16 bytes)
-        const iv = CryptoJS.lib.WordArray.create(combinedData.words.slice(4, 8));
+        let salt, iv, encryptedWords;
         
-        // Extract encrypted content (remaining bytes)
-        const encryptedWords = combinedData.words.slice(8);
+        if (hasVersion) {
+            // Version 1 format: [version(1), salt(4), iv(4), encrypted(rest)]
+            salt = CryptoJS.lib.WordArray.create(combinedData.words.slice(1, 5));
+            iv = CryptoJS.lib.WordArray.create(combinedData.words.slice(5, 9));
+            encryptedWords = combinedData.words.slice(9);
+        } else {
+            // Legacy format: [salt(4), iv(4), encrypted(rest)]
+            salt = CryptoJS.lib.WordArray.create(combinedData.words.slice(0, 4));
+            iv = CryptoJS.lib.WordArray.create(combinedData.words.slice(4, 8));
+            encryptedWords = combinedData.words.slice(8);
+        }
+        
         const encrypted = CryptoJS.enc.Base64.stringify(
             CryptoJS.lib.WordArray.create(encryptedWords)
         );
         
-        // Derive the key using the same salt and iterations
-        const key = CryptoJS.PBKDF2(password, salt, {
-            keySize: 256 / 32,
-            iterations: 1000
-        });
-        
-        // Decrypt
-        const decrypted = CryptoJS.AES.decrypt(encrypted, key, {
-            iv: iv,
-            padding: CryptoJS.pad.Pkcs7,
-            mode: CryptoJS.mode.CBC
-        });
-        
-        return decrypted.toString(CryptoJS.enc.Utf8);
+        // First try with UTF-8 parsed password
+        try {
+            const key = CryptoJS.PBKDF2(CryptoJS.enc.Utf8.parse(password), salt, {
+                keySize: 256 / 32,
+                iterations: 1000
+            });
+            
+            const decrypted = CryptoJS.AES.decrypt(encrypted, key, {
+                iv: iv,
+                padding: CryptoJS.pad.Pkcs7,
+                mode: CryptoJS.mode.CBC
+            });
+            
+            try {
+                // Try to convert to UTF-8 string
+                const utf8Data = decrypted.toString(CryptoJS.enc.Utf8);
+                return { data: utf8Data, isUtf8Valid: true };
+            } catch (_) {
+                // If UTF-8 conversion fails, return as Base64
+                console.warn('UTF-8 conversion failed, returning as Base64');
+                return { 
+                    data: decrypted.toString(CryptoJS.enc.Base64), 
+                    isUtf8Valid: false 
+                };
+            }
+        } catch (_) {
+            // If first try fails, fall back to raw password
+            try {
+                const key = CryptoJS.PBKDF2(password, salt, {
+                    keySize: 256 / 32,
+                    iterations: 1000
+                });
+                
+                const decrypted = CryptoJS.AES.decrypt(encrypted, key, {
+                    iv: iv,
+                    padding: CryptoJS.pad.Pkcs7,
+                    mode: CryptoJS.mode.CBC
+                });
+                
+                try {
+                    // Try to convert to UTF-8 string
+                    const utf8Data = decrypted.toString(CryptoJS.enc.Utf8);
+                    return { data: utf8Data, isUtf8Valid: true };
+                } catch (_) {
+                    // If UTF-8 conversion fails, return as Base64
+                    console.warn('UTF-8 conversion failed in fallback, returning as Base64');
+                    return { 
+                        data: decrypted.toString(CryptoJS.enc.Base64), 
+                        isUtf8Valid: false 
+                    };
+                }
+            } catch (_) {
+                console.error('Both decryption methods failed');
+                return { data: "", isUtf8Valid: false };
+            }
+        }
     } catch (error) {
         console.error('Error decrypting:', error);
         throw error;

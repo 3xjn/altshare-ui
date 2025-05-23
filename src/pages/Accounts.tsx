@@ -144,7 +144,7 @@ export function Accounts() {
             username: formData.get("username") as string,
             password: formData.get("password") as string,
             notes: (formData.get("notes") as string) || "",
-            game: (formData.get("game") as string) || "",
+            game: (formData.get("game") as string) || ""
         };
 
         try {
@@ -174,18 +174,38 @@ export function Accounts() {
         username: string;
         password: string;
         notes: string;
+        game?: string;
     }) => {
         if (!currentPassword || !encryptedMasterKey) {
             throw new Error("Missing credentials");
         }
 
-        const decryptedMasterKey = await decrypt(
+        const decryptedKeyResult = await decrypt(
             encryptedMasterKey,
             currentPassword
         );
+        
+        if (!decryptedKeyResult.isUtf8Valid) {
+            throw new Error("Failed to decrypt master key");
+        }
+        
+        const decryptedMasterKey = decryptedKeyResult.data;
+
+        // Ensure required fields and proper structure
+        const accountToEncrypt = {
+            username: accountData.username,
+            password: accountData.password,
+            notes: accountData.notes || "",
+            game: accountData.game || "",
+            isLoadingRank: false
+        };
+
+        // Create clean JSON string
+        const cleanJsonString = JSON.stringify(accountToEncrypt);
+        console.log("Account data to encrypt:", accountToEncrypt);
 
         const encryptedData = await encrypt(
-            JSON.stringify(accountData),
+            cleanJsonString,
             decryptedMasterKey
         );
 
@@ -210,14 +230,39 @@ export function Accounts() {
         username: string;
         password: string;
         notes: string;
+        game?: string;
     }) => {
         if (!currentPassword || !encryptedMasterKey || !editingAccount?.id) {
             throw new Error("Missing credentials or account ID");
         }
 
-        const encryptedData = await encrypt(
-            JSON.stringify(accountData),
+        const decryptedKeyResult = await decrypt(
+            encryptedMasterKey,
             currentPassword
+        );
+        
+        if (!decryptedKeyResult.isUtf8Valid) {
+            throw new Error("Failed to decrypt master key");
+        }
+        
+        const decryptedMasterKey = decryptedKeyResult.data;
+
+        // Ensure required fields and proper structure
+        const accountToEncrypt = {
+            username: accountData.username,
+            password: accountData.password,
+            notes: accountData.notes || "",
+            game: accountData.game || editingAccount.game || "",
+            isLoadingRank: false
+        };
+
+        // Create clean JSON string
+        const cleanJsonString = JSON.stringify(accountToEncrypt);
+        console.log("Account data to encrypt for edit:", accountToEncrypt);
+
+        const encryptedData = await encrypt(
+            cleanJsonString,
+            decryptedMasterKey
         );
 
         await accountApi.editAccount(editingAccount.id, {
@@ -249,6 +294,7 @@ export function Accounts() {
                     username: formData.get("username") as string,
                     password: formData.get("password") as string,
                     notes: (formData.get("notes") as string) || "",
+                    game: (formData.get("game") as string) || ""
                 };
 
                 if (editingAccount) {

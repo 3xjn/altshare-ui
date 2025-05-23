@@ -1,5 +1,5 @@
 import { accountApi } from '@/services/AccountApi';
-import { decrypt } from '@/utils/encryption';
+import { decrypt, DecryptionResult } from '@/utils/encryption';
 import { LocalStorageStore } from '@/utils/localStorageCache';
 import { create } from 'zustand';
 
@@ -72,20 +72,65 @@ export const useAccountStore = create<AccountContextType>((set) => ({
 
         if (!password || !encryptedKey) return console.error("Password or encryption key is null.");
 
-        const decryptedKey = await decrypt(encryptedKey, password);
-        console.log(decryptedKey)
+        const decryptedKeyResult = await decrypt(encryptedKey, password);
+        if (!decryptedKeyResult.isUtf8Valid) {
+            console.error("Failed to decrypt master key - invalid UTF-8 data");
+            return;
+        }
+        const decryptedKey = decryptedKeyResult.data;
+        console.log(decryptedKey);
 
         const response = await accountApi.getAccounts();
         if (response.length === 0) return;
 
-        const accounts: Account[] = await Promise.all(response.map(async (encryptedAccount) => {
-            const decryptedJson = await decrypt(encryptedAccount.encryptedData, decryptedKey);
-            return JSON.parse(decryptedJson) ?? [];
-        }))
+        console.log(response);
 
-        set({
-            decryptedAccounts: accounts
-        });
+        try {
+            const accounts: Account[] = await Promise.all(response.map(async (encryptedAccount) => {
+                if (!encryptedAccount || !encryptedAccount.encryptedData) {
+                    console.warn(`Invalid encrypted account data found, skipping ${encryptedAccount.id}`);
+                    return null;
+                }
+                
+                try {
+                    const decryptedResult = await decrypt(encryptedAccount.encryptedData, decryptedKey);
+                    if (!decryptedResult.isUtf8Valid) {
+                        console.warn(`Account ${encryptedAccount.id} contained invalid UTF-8 data, skipping`);
+                        return null;
+                    }
+                    
+                    if (!decryptedResult.data || decryptedResult.data.trim() === '') {
+                        console.warn(`Account ${encryptedAccount.id} had empty decrypted data, skipping`);
+                        return null;
+                    }
+                    
+                    try {
+                        const parsedData = JSON.parse(decryptedResult.data);
+                        if (!parsedData.username || !parsedData.password) {
+                            console.warn(`Account ${encryptedAccount.id} missing required fields, skipping`);
+                            return null;
+                        }
+                        return { 
+                            ...parsedData, 
+                            id: encryptedAccount.id,
+                            isLoadingRank: false 
+                        };
+                    } catch (parseError) {
+                        console.error(`Failed to parse JSON for account ${encryptedAccount.id}:`, parseError);
+                        return null;
+                    }
+                } catch (error) {
+                    console.error(`Failed to decrypt account ${encryptedAccount.id}:`, error);
+                    return null;
+                }
+            }));
+
+            set({
+                decryptedAccounts: accounts.filter(Boolean) as Account[]
+            });
+        } catch (error) {
+            console.error("Failed to load accounts:", error);
+        }
     },
     loadSharedAccounts: async () => {
         const password = useAccountStore.getState().currentPassword;
@@ -93,17 +138,61 @@ export const useAccountStore = create<AccountContextType>((set) => ({
 
         if (!password || !encryptedKey) return console.error("Password or encryption key is null.");
 
-        const decryptedKey = await decrypt(encryptedKey, password);
+        const decryptedKeyResult = await decrypt(encryptedKey, password);
+        if (!decryptedKeyResult.isUtf8Valid) {
+            console.error("Failed to decrypt master key for shared accounts - invalid UTF-8 data");
+            return;
+        }
+        const decryptedKey = decryptedKeyResult.data;
 
-        const response = await accountApi.getSharedAccounts();
-        const accounts: Account[] = await Promise.all(response.encryptedAccounts.map(async (encryptedAccount) => {
-            const decryptedJson = await decrypt(encryptedAccount.encryptedData, decryptedKey);
-            return JSON.parse(decryptedJson) ?? [];
-        }))
+        try {
+            const response = await accountApi.getSharedAccounts();
+            const accounts: Account[] = await Promise.all(response.encryptedAccounts.map(async (encryptedAccount) => {
+                if (!encryptedAccount || !encryptedAccount.encryptedData) {
+                    console.warn(`Invalid shared encrypted account data found, skipping`);
+                    return null;
+                }
+                
+                try {
+                    const decryptedResult = await decrypt(encryptedAccount.encryptedData, decryptedKey);
+                    if (!decryptedResult.isUtf8Valid) {
+                        console.warn(`Shared account ${encryptedAccount.id} contained invalid UTF-8 data, skipping`);
+                        return null;
+                    }
+                    
+                    if (!decryptedResult.data || decryptedResult.data.trim() === '') {
+                        console.warn(`Shared account ${encryptedAccount.id} had empty decrypted data, skipping`);
+                        return null;
+                    }
+                    
+                    try {
+                        const parsedData = JSON.parse(decryptedResult.data);
+                        if (!parsedData.username || !parsedData.password) {
+                            console.warn(`Shared account ${encryptedAccount.id} missing required fields, skipping`);
+                            return null;
+                        }
+                        return { 
+                            ...parsedData, 
+                            id: encryptedAccount.id,
+                            isShared: true,
+                            isLoadingRank: false 
+                        };
+                    } catch (parseError) {
+                        console.error(`Failed to parse JSON for shared account ${encryptedAccount.id}:`, parseError);
+                        return null;
+                    }
+                } catch (error) {
+                    console.error(`Failed to decrypt shared account ${encryptedAccount.id}:`, error);
+                    return null;
+                }
+            }));
 
-        set((state) => ({
-            decryptedAccounts: [...state.decryptedAccounts, ...accounts]
-        }));
+            set((state) => ({
+                decryptedAccounts: [...state.decryptedAccounts, ...accounts.filter(Boolean) as Account[]]
+            }));
+        } catch (error) {
+            console.error("Failed to load shared accounts:", error);
+        }
     },
     getRanks: async () => {
         const updateAccount = useAccountStore.getState().updateAccount;

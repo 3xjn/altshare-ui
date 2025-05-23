@@ -7,9 +7,6 @@ interface AddAccountRequest {
 interface EncryptedAccount {
     id: string;
     encryptedData: string;
-    userKey: string;
-    tag: string;
-    rank?: string;
 }
 
 interface CreateSharingRequest {
@@ -21,14 +18,7 @@ interface CreateSharingRequest {
 }
 
 interface SharedAccountResponse {
-    encryptedAccounts: {
-        encryptedData: string;
-        accountIv: string;
-        encryptedMasterKey: string;
-        iv: string;
-        salt: string;
-        tag: string;
-    }[];
+    encryptedAccounts: EncryptedAccount[];
 }
 
 interface RankResponse {
