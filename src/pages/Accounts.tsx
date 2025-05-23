@@ -188,7 +188,7 @@ export function Accounts() {
 
         const encryptedData = await encrypt(
             JSON.stringify(accountData),
-            decryptedMasterKey
+            decryptedMasterKey.data
         );
 
         console.log("Encryption result:", { encryptedData });
@@ -301,7 +301,7 @@ export function Accounts() {
         }
     };
 
-    const handleInviteClick = async () => {
+     // const handleInviteClick = async () => {
         // if (isConnecting) return;
         // setInviteOpen(true);
         // // Add test mode check
@@ -416,7 +416,7 @@ export function Accounts() {
         //             "Failed to establish connection. Please try again.",
         //     });
         // }
-    };
+    // };
 
     const handleAccountShare = async () => {
         // if (!masterKeyParams) {
