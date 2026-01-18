@@ -1,5 +1,4 @@
 import * as signalR from '@microsoft/signalr';
-import Cookies from 'js-cookie';
 import { SignalData } from 'simple-peer';
 
 interface SignalRCallbacks {
@@ -16,7 +15,7 @@ export class SignalRService {
     constructor(callbacks: SignalRCallbacks) {
         this.connection = new signalR.HubConnectionBuilder()
             .withUrl("/api/hub", {
-                accessTokenFactory: () => Cookies.get("token")!
+                withCredentials: true
             })
             .configureLogging(signalR.LogLevel.Debug)
             .withAutomaticReconnect()

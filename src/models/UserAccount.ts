@@ -15,6 +15,5 @@ export type RegisterData = AccountCreationDto & {
 }
 
 export type RegisterResponse = {
-    token: string;
     masterKeyEncrypted: string;
 }

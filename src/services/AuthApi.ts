@@ -3,20 +3,16 @@ import { ApiService } from './ApiService';
 import { RegisterData, RegisterResponse } from '@/models/UserAccount';
 
 interface LoginResponse {
-    token: string;
     masterKeyEncrypted: string;
-    masterKeyIv: string;
-    salt: string;
-    tag: string;
 }
 
 interface UserSecurityProfile {
     encryptedMasterKey: string;
-    masterKeyIv: string;
-    salt: string;
-    tag?: string;
 }
 
+interface CurrentUser {
+    email: string;
+}
 interface ErrorMessage {
     message: string;
 }
@@ -61,9 +57,24 @@ export class AuthApi extends ApiService {
         }
     }
 
+    async getCurrentUser(): Promise<CurrentUser> {
+        const response = await this.api.get(`${this.route}/me`);
+        return response.data;
+    }
+
     async getUserSecurityProfile(): Promise<UserSecurityProfile> {
         const response = await this.api.get(`${this.route}/user-security-profile`);
         return response.data;
+    }
+
+    async logout(): Promise<void> {
+        await this.api.post(`${this.route}/logout`);
+    }
+
+    async updateUserSecurityProfile(encryptedMasterKey: string): Promise<void> {
+        await this.api.put(`${this.route}/user-security-profile`, {
+            encryptedMasterKey
+        });
     }
 }
 

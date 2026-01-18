@@ -25,7 +25,6 @@ import {
 import { Toast, useToast } from "@/hooks/use-toast";
 import { useAccountStore } from "@/stores/AccountStore";
 import { authApi, isErrorMessage } from "@/services/AuthApi";
-import Cookies from "js-cookie";
 
 export interface LoginFormData {
     email: string;
@@ -48,9 +47,6 @@ const toastSettings: Partial<Toast> = {
 interface LoginSuccessData extends LoginFormData {
     response: {
         masterKeyEncrypted: string;
-        masterKeyIv: string;
-        salt: string;
-        tag: string;
     };
 }
 
@@ -81,7 +77,6 @@ const LoginFormFields = ({ onLoginSuccess }: LoginFormProps) => {
                 return;
             }
 
-            Cookies.set("token", response.token);
             onLoginSuccess({ ...data, response });
         } catch {
             toast({
@@ -155,6 +150,7 @@ export function LoginForm({
         setIsAuthenticated,
         setCurrentPassword,
         setEncryptedMasterKey,
+        setCurrentEmail,
     } = useAccountStore();
 
     useEffect(() => {
@@ -191,6 +187,7 @@ export function LoginForm({
     const handleLoginSuccess = (data: LoginSuccessData) => {
         setIsAuthenticated(true);
         setCurrentPassword(data.password);
+        setCurrentEmail(data.email);
         setEncryptedMasterKey(data.response.masterKeyEncrypted);
 
         navigate("/", { replace: true });

@@ -1,5 +1,12 @@
 import { accountApi } from '@/services/AccountApi';
-import { decrypt, DecryptionResult } from '@/utils/encryption';
+import { authApi } from '@/services/AuthApi';
+import {
+    decryptAccountData,
+    decryptMasterKey,
+    encryptAccountData,
+    encryptExistingMasterKey
+} from '@/utils/encryption';
+import { base64ToArrayBuffer, decryptDataToBase64, deriveEncryptionKey } from '@/utils/crypto';
 import { LocalStorageStore } from '@/utils/localStorageCache';
 import { create } from 'zustand';
 
@@ -36,6 +43,9 @@ interface AccountContextType {
     currentPassword: string | null;
     setCurrentPassword: (password: string) => void;
 
+    currentEmail: string | null;
+    setCurrentEmail: (email: string) => void;
+
     encryptedMasterKey: string | null;
     setEncryptedMasterKey: (key: string) => void;
 
@@ -60,6 +70,11 @@ export const useAccountStore = create<AccountContextType>((set) => ({
         currentPassword: password
     })),
 
+    currentEmail: null,
+    setCurrentEmail: (email) => set(() => ({
+        currentEmail: email
+    })),
+
     encryptedMasterKey: null,
     setEncryptedMasterKey: (key) => set(() => ({
         encryptedMasterKey: key
@@ -72,20 +87,31 @@ export const useAccountStore = create<AccountContextType>((set) => ({
 
         if (!password || !encryptedKey) return console.error("Password or encryption key is null.");
 
-        const decryptedKeyResult = await decrypt(encryptedKey, password);
+        const decryptedKeyResult = await decryptMasterKey(encryptedKey, password);
         if (!decryptedKeyResult.isUtf8Valid) {
             console.error("Failed to decrypt master key - invalid UTF-8 data");
             return;
         }
         const decryptedKey = decryptedKeyResult.data;
-        console.log(decryptedKey);
+
+        if (decryptedKeyResult.wasLegacy) {
+            try {
+                const updatedEncryptedKey = await encryptExistingMasterKey(
+                    decryptedKey,
+                    password
+                );
+                await authApi.updateUserSecurityProfile(updatedEncryptedKey);
+                set({ encryptedMasterKey: updatedEncryptedKey });
+            } catch (error) {
+                console.warn("Failed to migrate encrypted master key:", error);
+            }
+        }
 
         const response = await accountApi.getAccounts();
         if (response.length === 0) return;
 
-        console.log(response);
-
         try {
+            const migrationTasks: Promise<void>[] = [];
             const accounts: Account[] = await Promise.all(response.map(async (encryptedAccount) => {
                 if (!encryptedAccount || !encryptedAccount.encryptedData) {
                     console.warn(`Invalid encrypted account data found, skipping ${encryptedAccount.id}`);
@@ -93,7 +119,11 @@ export const useAccountStore = create<AccountContextType>((set) => ({
                 }
                 
                 try {
-                    const decryptedResult = await decrypt(encryptedAccount.encryptedData, decryptedKey);
+                    let decryptedResult = await decryptAccountData(
+                        encryptedAccount.encryptedData,
+                        decryptedKey,
+                        password
+                    );
                     if (!decryptedResult.isUtf8Valid) {
                         console.warn(`Account ${encryptedAccount.id} contained invalid UTF-8 data, skipping`);
                         return null;
@@ -104,11 +134,30 @@ export const useAccountStore = create<AccountContextType>((set) => ({
                         return null;
                     }
                     
+                    let parsedData: Account | null = null;
                     try {
-                        const parsedData = JSON.parse(decryptedResult.data);
+                        parsedData = JSON.parse(decryptedResult.data);
                         if (!parsedData.username || !parsedData.password) {
                             console.warn(`Account ${encryptedAccount.id} missing required fields, skipping`);
                             return null;
+                        }
+
+                        if (
+                            decryptedResult.wasLegacy &&
+                            encryptedAccount.id
+                        ) {
+                            migrationTasks.push(
+                                (async () => {
+                                    const migrated = await encryptAccountData(
+                                        decryptedResult.data,
+                                        decryptedKey
+                                    );
+                                    await accountApi.editAccount(
+                                        encryptedAccount.id,
+                                        { encryptedData: migrated }
+                                    );
+                                })()
+                            );
                         }
                         return { 
                             ...parsedData, 
@@ -116,6 +165,54 @@ export const useAccountStore = create<AccountContextType>((set) => ({
                             isLoadingRank: false 
                         };
                     } catch (parseError) {
+                        if (password && !decryptedResult.usedFallbackPassword) {
+                            decryptedResult = await decryptAccountData(
+                                encryptedAccount.encryptedData,
+                                decryptedKey,
+                                password,
+                                true
+                            );
+                            if (
+                                decryptedResult.isUtf8Valid &&
+                                decryptedResult.data &&
+                                decryptedResult.data.trim() !== ""
+                            ) {
+                                try {
+                                    parsedData = JSON.parse(decryptedResult.data);
+                                    if (!parsedData.username || !parsedData.password) {
+                                        console.warn(`Account ${encryptedAccount.id} missing required fields after fallback, skipping`);
+                                        return null;
+                                    }
+
+                                    if (
+                                        decryptedResult.wasLegacy &&
+                                        encryptedAccount.id
+                                    ) {
+                                        migrationTasks.push(
+                                            (async () => {
+                                                const migrated = await encryptAccountData(
+                                                    decryptedResult.data,
+                                                    decryptedKey
+                                                );
+                                                await accountApi.editAccount(
+                                                    encryptedAccount.id,
+                                                    { encryptedData: migrated }
+                                                );
+                                            })()
+                                        );
+                                    }
+
+                                    return {
+                                        ...parsedData,
+                                        id: encryptedAccount.id,
+                                        isLoadingRank: false
+                                    };
+                                } catch (fallbackParseError) {
+                                    console.error(`Failed to parse JSON after fallback for account ${encryptedAccount.id}:`, fallbackParseError);
+                                }
+                            }
+                        }
+
                         console.error(`Failed to parse JSON for account ${encryptedAccount.id}:`, parseError);
                         return null;
                     }
@@ -128,22 +225,17 @@ export const useAccountStore = create<AccountContextType>((set) => ({
             set({
                 decryptedAccounts: accounts.filter(Boolean) as Account[]
             });
+
+            if (migrationTasks.length > 0) {
+                await Promise.allSettled(migrationTasks);
+            }
         } catch (error) {
             console.error("Failed to load accounts:", error);
         }
     },
     loadSharedAccounts: async () => {
         const password = useAccountStore.getState().currentPassword;
-        const encryptedKey = useAccountStore.getState().encryptedMasterKey;
-
-        if (!password || !encryptedKey) return console.error("Password or encryption key is null.");
-
-        const decryptedKeyResult = await decrypt(encryptedKey, password);
-        if (!decryptedKeyResult.isUtf8Valid) {
-            console.error("Failed to decrypt master key for shared accounts - invalid UTF-8 data");
-            return;
-        }
-        const decryptedKey = decryptedKeyResult.data;
+        if (!password) return console.error("Password is null.");
 
         try {
             const response = await accountApi.getSharedAccounts();
@@ -152,9 +244,27 @@ export const useAccountStore = create<AccountContextType>((set) => ({
                     console.warn(`Invalid shared encrypted account data found, skipping`);
                     return null;
                 }
+
+                if (!encryptedAccount.encryptedMasterKey || !encryptedAccount.iv || !encryptedAccount.salt || !encryptedAccount.tag) {
+                    console.warn(`Shared account missing key material, skipping`);
+                    return null;
+                }
                 
                 try {
-                    const decryptedResult = await decrypt(encryptedAccount.encryptedData, decryptedKey);
+                    const derivedKey = await deriveEncryptionKey(
+                        password,
+                        base64ToArrayBuffer(encryptedAccount.salt)
+                    );
+                    const sharedMasterKey = await decryptDataToBase64(
+                        encryptedAccount.encryptedMasterKey,
+                        encryptedAccount.iv,
+                        encryptedAccount.tag,
+                        derivedKey
+                    );
+                    const decryptedResult = await decryptAccountData(
+                        encryptedAccount.encryptedData,
+                        sharedMasterKey
+                    );
                     if (!decryptedResult.isUtf8Valid) {
                         console.warn(`Shared account ${encryptedAccount.id} contained invalid UTF-8 data, skipping`);
                         return null;
@@ -173,7 +283,7 @@ export const useAccountStore = create<AccountContextType>((set) => ({
                         }
                         return { 
                             ...parsedData, 
-                            id: encryptedAccount.id,
+                            id: encryptedAccount.id ?? "",
                             isShared: true,
                             isLoadingRank: false 
                         };
@@ -237,9 +347,16 @@ export const useAccountStore = create<AccountContextType>((set) => ({
         })
     })),
 
-    logout: () => set(() => ({
-        isAuthenticated: false,
-        currentPassword: null,
-        decryptedAccounts: []
-    }))
+    logout: () => {
+        authApi.logout().catch((error) => {
+            console.warn("Failed to logout:", error);
+        });
+        set(() => ({
+            isAuthenticated: false,
+            currentPassword: null,
+            currentEmail: null,
+            encryptedMasterKey: null,
+            decryptedAccounts: []
+        }));
+    }
 }))

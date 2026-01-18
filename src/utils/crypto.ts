@@ -64,15 +64,19 @@ export async function encryptData(data: string, key: CryptoKey): Promise<Encrypt
 }
 
 // Decrypt data using AES-GCM
-export async function decryptData(encryptedData: string, iv: string, tag: string, key: CryptoKey): Promise<string> {
-    // Combine ciphertext and tag
+const decryptDataBytes = async (
+    encryptedData: string,
+    iv: string,
+    tag: string,
+    key: CryptoKey
+): Promise<ArrayBuffer> => {
     const ciphertextBytes = base64ToArrayBuffer(encryptedData);
     const tagBytes = base64ToArrayBuffer(tag);
     const combinedBytes = new Uint8Array(ciphertextBytes.byteLength + tagBytes.byteLength);
     combinedBytes.set(new Uint8Array(ciphertextBytes), 0);
     combinedBytes.set(new Uint8Array(tagBytes), ciphertextBytes.byteLength);
 
-    const decryptedBuffer = await crypto.subtle.decrypt(
+    return crypto.subtle.decrypt(
         {
             name: 'AES-GCM',
             iv: base64ToArrayBuffer(iv),
@@ -81,8 +85,26 @@ export async function decryptData(encryptedData: string, iv: string, tag: string
         key,
         combinedBytes
     );
+};
 
+export async function decryptData(
+    encryptedData: string,
+    iv: string,
+    tag: string,
+    key: CryptoKey
+): Promise<string> {
+    const decryptedBuffer = await decryptDataBytes(encryptedData, iv, tag, key);
     return new TextDecoder().decode(decryptedBuffer);
+}
+
+export async function decryptDataToBase64(
+    encryptedData: string,
+    iv: string,
+    tag: string,
+    key: CryptoKey
+): Promise<string> {
+    const decryptedBuffer = await decryptDataBytes(encryptedData, iv, tag, key);
+    return arrayBufferToBase64(decryptedBuffer);
 }
 
 // Derive key from password using PBKDF2

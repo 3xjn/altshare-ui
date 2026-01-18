@@ -1,5 +1,4 @@
 import axios, { AxiosInstance } from 'axios';
-import Cookies from 'js-cookie';
 
 export class ApiService {
     protected api: AxiosInstance;
@@ -9,22 +8,7 @@ export class ApiService {
             headers: {
                 'Content-Type': 'application/json',
             },
+            withCredentials: true,
         });
-
-        this.api.interceptors.request.use((config) => {
-            const token = Cookies.get('token');
-            if (token) {
-                config.headers.Authorization = `Bearer ${token}`;
-            }
-            return config;
-        });
-    }
-
-    protected getHeaders() {
-        const token = Cookies.get('token');
-        return {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-        };
     }
 }

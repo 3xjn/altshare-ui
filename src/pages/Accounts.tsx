@@ -9,7 +9,7 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2, RefreshCcw, Settings, Lock } from "lucide-react";
+import { Plus, Pencil, Trash2, RefreshCcw, Settings, Lock, Share } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -20,7 +20,7 @@ import {
 import { useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { Account, useAccountStore } from "@/stores/AccountStore";
-import { decrypt, encrypt } from "@/utils/encryption";
+import { decryptMasterKey, encryptAccountData } from "@/utils/encryption";
 import { accountApi } from "@/services/AccountApi";
 import { useToast } from "@/hooks/use-toast";
 import { PasswordPrompt } from "@/components/PasswordPrompt";
@@ -39,6 +39,7 @@ import { PeerService } from "@/services/PeerService";
 import AddAccountDialog from "@/components/AddAccountDialog";
 import { Stack } from "@/components/ui/stack";
 import { getImageFromRank } from "@/utils/getImageFromRank";
+import { base64ToArrayBuffer } from "@/utils/crypto";
 
 export function Accounts() {
     const {
@@ -65,6 +66,7 @@ export function Accounts() {
     const [inviteCode, setInviteCode] = useState<string | null>(null);
     const [peer, setPeer] = useState<PeerService | null>(null);
     const [shareOpen, setShareOpen] = useState(false);
+    const [inviteeEmail, setInviteeEmail] = useState<string | null>(null);
     const [searchParams] = useSearchParams();
     const isTestMode = searchParams.get("test") === "true";
 
@@ -178,20 +180,18 @@ export function Accounts() {
         if (!currentPassword || !encryptedMasterKey) {
             throw new Error("Missing credentials");
         }
-
-        console.log("decrypting")
-
-        const decryptedMasterKey = await decrypt(
+        const decryptedMasterKey = await decryptMasterKey(
             encryptedMasterKey,
             currentPassword
         );
+        if (!decryptedMasterKey.isUtf8Valid || !decryptedMasterKey.data) {
+            throw new Error("Failed to decrypt master key");
+        }
 
-        const encryptedData = await encrypt(
+        const encryptedData = await encryptAccountData(
             JSON.stringify(accountData),
             decryptedMasterKey.data
         );
-
-        console.log("Encryption result:", { encryptedData });
 
         await accountApi.addAccount({
             encryptedData,
@@ -217,9 +217,16 @@ export function Accounts() {
             throw new Error("Missing credentials or account ID");
         }
 
-        const encryptedData = await encrypt(
-            JSON.stringify(accountData),
+        const decryptedMasterKey = await decryptMasterKey(
+            encryptedMasterKey,
             currentPassword
+        );
+        if (!decryptedMasterKey.isUtf8Valid || !decryptedMasterKey.data) {
+            throw new Error("Failed to decrypt master key");
+        }
+        const encryptedData = await encryptAccountData(
+            JSON.stringify(accountData),
+            decryptedMasterKey.data
         );
 
         await accountApi.editAccount(editingAccount.id, {
@@ -301,144 +308,178 @@ export function Accounts() {
         }
     };
 
-     // const handleInviteClick = async () => {
-        // if (isConnecting) return;
-        // setInviteOpen(true);
-        // // Add test mode check
-        // if (searchParams.get('test') === 'true') {
-        //     setIsConnecting(true);
-        //     setTimeout(() => {
-        //         setIsConnecting(false);
-        //         setInviteCode('test-invite-code-12345');
-        //     }, 1500); // Simulate loading delay
-        //     return;
-        // }
-        // try {
-        //     setIsConnecting(true);
-        //     const service = new SignalRService({
-        //         roomCreated: (roomId) => {
-        //             setInviteCode(roomId);
-        //             setIsConnecting(false);
-        //             service.roomId = roomId;
-        //             console.log("Room created:", roomId);
-        //         },
-        //         userJoined: () => {
-        //             if (peer) {
-        //                 peer.initiate(true, service.roomId);
-        //             }
-        //         },
-        //         receiveSignal: (signal) => {
-        //             console.log("Received signal:", signal);
-        //             if (peer) {
-        //                 peer.signal(signal);
-        //             }
-        //         },
-        //     });
-        //     const peer = new PeerService(service);
-        //     peer.registerHandler('verification', async (payload) => {
-        //         if (!masterKeyParams || !currentPassword) {
-        //             throw new Error("Missing master key parameters or password");
-        //         }
-        //         const decryptedMasterKey = await decrypt(
-        //             masterKeyParams.masterKeyEncrypted,
-        //             masterKeyParams.masterKeyIv,
-        //             masterKeyParams.salt,
-        //             masterKeyParams.tag,
-        //             currentPassword
-        //         );
-        //         console.log("Decryption params:", {
-        //             masterKeyEncrypted: masterKeyParams.masterKeyEncrypted,
-        //             masterKeyIv: masterKeyParams.masterKeyIv,
-        //             salt: masterKeyParams.salt,
-        //             tag: masterKeyParams.tag,
-        //             password: currentPassword
-        //         });
-        //         const rawKeyBuffer = await crypto.subtle.exportKey(
-        //             "raw",
-        //             decryptedMasterKey
-        //         );
-        //         const hmacKey = await crypto.subtle.importKey(
-        //             'raw',
-        //             rawKeyBuffer,
-        //             { name: 'HMAC', hash: 'SHA-256' },
-        //             false,
-        //             ['sign']
-        //         );
-        //         const theirSignature = base64ToArrayBuffer(payload.signature);
-        //         const mySignature = await crypto.subtle.sign(
-        //             'HMAC',
-        //             hmacKey,
-        //             base64ToArrayBuffer(payload.token)
-        //         );
-        //         // Verify signatures match
-        //         const verified = new Uint8Array(theirSignature).every(
-        //             (value, index) => value === new Uint8Array(mySignature)[index]
-        //         );
-        //         if (verified) {
-        //             // Create sharing relationship
-        //             await accountApi.createSharingRelationship({
-        //                 sharedWithEmail: payload.encryptedKey.email,
-        //                 encryptedMasterKey: payload.encryptedKey.encryptedMasterKey,
-        //                 iv: payload.encryptedKey.iv,
-        //                 salt: payload.encryptedKey.salt,
-        //                 tag: payload.encryptedKey.tag
-        //             });
-        //             peer.sendMessage("sharingConfirmation", {
-        //                 success: true
-        //             })
-        //             toast({
-        //                 title: "Success",
-        //                 description: "Account sharing verified successfully.",
-        //             });
-        //             setShareOpen(false);
-        //         } else {
-        //             toast({
-        //                 variant: "destructive",
-        //                 title: "Error",
-        //                 description: "Failed to verify account sharing.",
-        //             });
-        //         }
-        //     });
-        //     peer.onConnect = () => {
-        //         console.log("share open")
-        //         setShareOpen(true);
-        //     };
-        //     await service.connect();
-        //     service.createRoom();
-        //     setSignalRService(service);
-        //     setPeer(peer);
-        // } catch (error) {
-        //     console.error("Failed to establish connection:", error);
-        //     toast({
-        //         variant: "destructive",
-        //         title: "Connection Failed",
-        //         description:
-        //             "Failed to establish connection. Please try again.",
-        //     });
-        // }
-    // };
+    const handleInviteClick = async () => {
+        if (isConnecting) return;
+        setInviteOpen(true);
+        setInviteCode(null);
+        setInviteeEmail(null);
+
+        if (searchParams.get("test") === "true") {
+            setIsConnecting(true);
+            setTimeout(() => {
+                setIsConnecting(false);
+                setInviteCode("test-invite-code-12345");
+                setInviteeEmail("test-user@example.com");
+            }, 1500);
+            return;
+        }
+
+        try {
+            setIsConnecting(true);
+            let newPeer: PeerService | null = null;
+            const service = new SignalRService({
+                roomCreated: (roomId) => {
+                    setInviteCode(roomId);
+                    setIsConnecting(false);
+                    service.roomId = roomId;
+                },
+                userJoined: () => {
+                    if (newPeer) {
+                        newPeer.initiate(true, service.roomId);
+                    }
+                },
+                receiveSignal: (signal) => {
+                    if (newPeer) {
+                        newPeer.signal(signal);
+                    }
+                },
+            });
+
+            newPeer = new PeerService(service);
+            newPeer.registerHandler("userInfo", (payload) => {
+                setInviteeEmail(payload.email);
+            });
+
+            newPeer.registerHandler("verification", async (payload) => {
+                try {
+                    if (!encryptedMasterKey || !currentPassword) {
+                        throw new Error("Missing master key or password");
+                    }
+
+                    const decryptedMasterKey = await decryptMasterKey(
+                        encryptedMasterKey,
+                        currentPassword
+                    );
+                    if (
+                        !decryptedMasterKey.isUtf8Valid ||
+                        !decryptedMasterKey.data
+                    ) {
+                        throw new Error("Failed to decrypt master key");
+                    }
+
+                    const rawKeyBuffer = base64ToArrayBuffer(
+                        decryptedMasterKey.data
+                    );
+                    const hmacKey = await crypto.subtle.importKey(
+                        "raw",
+                        rawKeyBuffer,
+                        { name: "HMAC", hash: "SHA-256" },
+                        false,
+                        ["sign"]
+                    );
+                    const theirSignature = base64ToArrayBuffer(
+                        payload.signature
+                    );
+                    const mySignature = await crypto.subtle.sign(
+                        "HMAC",
+                        hmacKey,
+                        base64ToArrayBuffer(payload.token)
+                    );
+
+                    const verified = new Uint8Array(theirSignature).every(
+                        (value, index) =>
+                            value === new Uint8Array(mySignature)[index]
+                    );
+
+                    if (!verified) {
+                        throw new Error("Failed to verify account sharing");
+                    }
+
+                    await accountApi.createSharingRelationship({
+                        sharedWithEmail: payload.encryptedKey.email,
+                        encryptedMasterKey: payload.encryptedKey.encryptedMasterKey,
+                        iv: payload.encryptedKey.iv,
+                        salt: payload.encryptedKey.salt,
+                        tag: payload.encryptedKey.tag,
+                    });
+
+                    newPeer?.sendMessage("sharingConfirmation", { success: true });
+                    toast({
+                        title: "Success",
+                        description: "Account sharing verified successfully.",
+                    });
+                    setShareOpen(false);
+                } catch (error) {
+                    console.error("Share verification failed:", error);
+                    toast({
+                        variant: "destructive",
+                        title: "Error",
+                        description: "Failed to verify account sharing.",
+                    });
+                }
+            });
+
+            newPeer.onConnect = () => {
+                setInviteOpen(false);
+                setShareOpen(true);
+            };
+
+            await service.connect();
+            service.createRoom();
+            setSignalRService(service);
+            setPeer(newPeer);
+        } catch (error) {
+            console.error("Failed to establish connection:", error);
+            toast({
+                variant: "destructive",
+                title: "Connection Failed",
+                description:
+                    "Failed to establish connection. Please try again.",
+            });
+            setIsConnecting(false);
+        }
+    };
 
     const handleAccountShare = async () => {
-        // if (!masterKeyParams) {
-        //     throw Error("failed to find master key data.");
-        // } else if (!currentPassword) {
-        //     throw Error("user is not authed");
-        // }
-        // const decryptedMasterKey = await decrypt(
-        //     masterKeyParams.masterKeyEncrypted,
-        //     masterKeyParams.masterKeyIv,
-        //     masterKeyParams.salt,
-        //     masterKeyParams.tag,
-        //     currentPassword
-        // );
-        // const rawKeyBuffer = await crypto.subtle.exportKey(
-        //     "raw",
-        //     decryptedMasterKey
-        // );
-        // peer!.sendMessage('masterKey', {
-        //     key: arrayBufferToBase64(rawKeyBuffer)
-        // });
-        // setShareOpen(false);
+        if (!peer) {
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "No active sharing session found.",
+            });
+            return;
+        }
+
+        if (!encryptedMasterKey || !currentPassword) {
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Missing master key or password.",
+            });
+            return;
+        }
+
+        try {
+            const decryptedMasterKey = await decryptMasterKey(
+                encryptedMasterKey,
+                currentPassword
+            );
+            if (!decryptedMasterKey.isUtf8Valid || !decryptedMasterKey.data) {
+                throw new Error("Failed to decrypt master key");
+            }
+
+            peer.sendMessage("masterKey", {
+                key: decryptedMasterKey.data,
+            });
+            setShareOpen(false);
+        } catch (error) {
+            console.error("Failed to share master key:", error);
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to share master key.",
+            });
+        }
     };
 
     if (!isAuthenticated && !isTestMode) {
@@ -462,7 +503,7 @@ export function Accounts() {
                             <RefreshCcw />
                             Refresh
                         </Button>
-                        {/* <Button
+                        <Button
                             variant="outline"
                             size="sm"
                             onClick={handleInviteClick}
@@ -498,7 +539,7 @@ export function Accounts() {
                                     Invite
                                 </>
                             )}
-                        </Button> */}
+                        </Button>
                         <DropdownMenu>
                             <DropdownMenuTrigger>
                                 <Settings size={24} strokeWidth={1.5} />
@@ -744,14 +785,22 @@ export function Accounts() {
                         <DialogHeader>
                             <DialogTitle>Share Accounts</DialogTitle>
                             <DialogDescription>
-                                Clicking "Yes" will give the connected user
-                                access to all your accounts.
+                                You are about to share all your accounts with{" "}
+                                <span className="font-semibold text-foreground">
+                                    {inviteeEmail ?? "the connected user"}
+                                </span>
+                                . Make sure this is the right person before
+                                continuing.
                             </DialogDescription>
                         </DialogHeader>
+                        <div className="text-sm text-muted-foreground">
+                            Connected user:{" "}
+                            {inviteeEmail ?? "Waiting for identity..."}
+                        </div>
                         <div className="flex flex-row gap-4 justify-end">
                             <Button
                                 variant="outline"
-                                onClick={() => setInviteOpen(false)}
+                                onClick={() => setShareOpen(false)}
                             >
                                 Cancel
                             </Button>

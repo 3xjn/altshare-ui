@@ -9,6 +9,15 @@ interface EncryptedAccount {
     encryptedData: string;
 }
 
+interface SharedEncryptedAccount {
+    id?: string;
+    encryptedData: string;
+    encryptedMasterKey: string;
+    iv: string;
+    salt: string;
+    tag: string;
+}
+
 interface CreateSharingRequest {
     sharedWithEmail: string;
     encryptedMasterKey: string;
@@ -18,7 +27,7 @@ interface CreateSharingRequest {
 }
 
 interface SharedAccountResponse {
-    encryptedAccounts: EncryptedAccount[];
+    encryptedAccounts: SharedEncryptedAccount[];
 }
 
 interface RankResponse {

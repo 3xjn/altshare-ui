@@ -20,8 +20,6 @@ import { authApi } from "@/services/AuthApi";
 import { setupUserEncryption } from "@/utils/encryption";
 import { useAccountStore } from "@/stores/AccountStore";
 YupPassword(yup);
-
-import Cookies from "js-cookie";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 
@@ -68,7 +66,7 @@ const MyForm = () => {
         resolver: yupResolver(schema),
     });
 
-    const { setIsAuthenticated, setCurrentPassword, setEncryptedMasterKey } =
+    const { setIsAuthenticated, setCurrentPassword, setEncryptedMasterKey, setCurrentEmail } =
         useAccountStore();
 
     const onSubmit: SubmitHandler<AccountCreationDto> = async (data) => {
@@ -105,27 +103,20 @@ const MyForm = () => {
                 password: data.password,
                 username: data.username,
                 passwordConfirmation: data.passwordConfirmation,
-                masterKeyEncrypted: JSON.stringify(encryptedMasterKey),
+                masterKeyEncrypted: encryptedMasterKey,
             });
 
-            if (response.token) {
-                Cookies.set("token", response.token, {
-                    path: "/",
-                    sameSite: "strict",
-                    expires: 1,
-                });
+            setEncryptedMasterKey(response.masterKeyEncrypted);
+            setCurrentPassword(data.password);
+            setCurrentEmail(data.email);
 
-                setEncryptedMasterKey(response.masterKeyEncrypted);
-                setCurrentPassword(data.password);
+            // validate the new token
+            const isValid = await authApi.validate();
+            setIsAuthenticated(isValid);
 
-                // validate the new token
-                const isValid = await authApi.validate();
-                setIsAuthenticated(isValid);
-
-                // if valid go to home page
-                if (isValid) {
-                    navigate("/", { replace: true });
-                }
+            // if valid go to home page
+            if (isValid) {
+                navigate("/", { replace: true });
             }
         } catch (error) {
             console.error("Registration failed:", error);

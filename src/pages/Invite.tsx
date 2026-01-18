@@ -6,10 +6,10 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { arrayBufferToBase64, base64ToArrayBuffer, encryptExistingMasterKey } from "@/utils/crypto";
-import { getCurrentUserEmail } from "@/utils/getJwtClaim";
+import { authApi } from "@/services/AuthApi";
 
 export const Invite: React.FC = () => {
-    const { isAuthenticated, currentPassword } = useAccountStore();
+    const { isAuthenticated, currentPassword, currentEmail, setCurrentEmail } = useAccountStore();
     const navigate = useNavigate();
     const { toast } = useToast();
     const [searchParams] = useSearchParams();
@@ -42,7 +42,31 @@ export const Invite: React.FC = () => {
 
                 const peer = new PeerService(service);
 
-                peer.onConnect = () => setMessage("Waiting for user to accept.");
+                peer.onConnect = async () => {
+                    setMessage("Connected. Waiting for approval.");
+                    try {
+                        const email = await resolveEmail();
+                        if (email) {
+                            peer.sendMessage("userInfo", { email });
+                        }
+                    } catch (error) {
+                        console.error("Failed to send user info:", error);
+                    }
+                };
+
+                const resolveEmail = async (): Promise<string | null> => {
+                    if (currentEmail) return currentEmail;
+                    try {
+                        const user = await authApi.getCurrentUser();
+                        if (user.email) {
+                            setCurrentEmail(user.email);
+                            return user.email;
+                        }
+                    } catch (error) {
+                        console.error("Failed to fetch current user:", error);
+                    }
+                    return null;
+                };
 
                 peer.registerHandler('masterKey', async (payload) => {
                     setMessage("User accepted!")
@@ -51,10 +75,10 @@ export const Invite: React.FC = () => {
                     
                     const shareToken = crypto.getRandomValues(new Uint8Array(16));
                     const keyData = base64ToArrayBuffer(payload.key);
-                    const email = getCurrentUserEmail();
+                    const email = await resolveEmail();
                     
                     if (!email) {
-                        throw new Error("User email not found in token");
+                        throw new Error("User email not found in session");
                     }
 
                     const hmacKey = await window.crypto.subtle.importKey(
