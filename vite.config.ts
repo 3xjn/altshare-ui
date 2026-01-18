@@ -52,6 +52,11 @@ export default defineConfig({
                 changeOrigin: true,
                 secure: false
             },
+            '/api/group': {
+                target: 'https://localhost:7006',
+                changeOrigin: true,
+                secure: false
+            },
             '/api/hub': {
                 target: 'https://localhost:7006',
                 changeOrigin: true,

@@ -68,10 +68,10 @@ export const Invite: React.FC = () => {
                     return null;
                 };
 
-                peer.registerHandler('masterKey', async (payload) => {
+                peer.registerHandler('groupKey', async (payload) => {
                     setMessage("User accepted!")
 
-                    const encryptedKey = await encryptExistingMasterKey(payload.key, currentPassword!);
+                    const encryptedGroupKey = await encryptExistingMasterKey(payload.key, currentPassword!);
                     
                     const shareToken = crypto.getRandomValues(new Uint8Array(16));
                     const keyData = base64ToArrayBuffer(payload.key);
@@ -100,7 +100,11 @@ export const Invite: React.FC = () => {
                         signature: arrayBufferToBase64(signature),
                         encryptedKey: {
                             email,
-                            ...encryptedKey
+                            groupId: payload.groupId,
+                            encryptedGroupKey: encryptedGroupKey.encryptedMasterKey,
+                            iv: encryptedGroupKey.iv,
+                            salt: encryptedGroupKey.salt,
+                            tag: encryptedGroupKey.tag
                         }
                     });
                 });

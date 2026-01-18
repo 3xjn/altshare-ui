@@ -1,7 +1,8 @@
 import Peer, { SignalData, SimplePeerData } from 'simple-peer';
 import { SignalRService } from './SignalR';
 
-interface MasterKeyPayload {
+interface GroupKeyPayload {
+    groupId: string;
     key: string;
 }
 
@@ -10,7 +11,8 @@ interface VerificationPayload {
     signature: string;
     encryptedKey: {
         email: string;
-        encryptedMasterKey: string;
+        groupId: string;
+        encryptedGroupKey: string;
         iv: string;
         salt: string;
         tag: string;
@@ -26,7 +28,7 @@ interface SharingConfirmationPayload {
 }
 
 type MessagePayloads = {
-    'masterKey': MasterKeyPayload;
+    'groupKey': GroupKeyPayload;
     'verification': VerificationPayload;
     'userInfo': UserInfoPayload;
     'sharingConfirmation': SharingConfirmationPayload

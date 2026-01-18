@@ -18,20 +18,24 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Dispatch, SetStateAction, useState } from "react";
+import { Dispatch, SetStateAction, useEffect, useMemo, useState } from "react";
 import { Stack } from "./ui/stack";
+import type { AccountGroup } from "@/stores/AccountStore";
 
 interface DefaultValues {
-    game: string;
-    username: string;
-    password: string;
-    notes: string;
+    game?: string;
+    username?: string;
+    password?: string;
+    notes?: string;
+    groupId?: string;
 }
 interface AddAccountDialog {
     open: boolean;
     setOpen: Dispatch<SetStateAction<boolean>>;
     handleSubmit: React.FormEventHandler<HTMLFormElement> | undefined;
-    // defaultValues: DefaultValues;
+    defaultValues?: DefaultValues;
+    groups: AccountGroup[];
+    defaultGroupId: string | null;
 }
 
 const games = { "Marvel Rivals": "./images/marvel-rivals.png" };
@@ -40,9 +44,23 @@ export default function AddAccountDialog({
     open,
     setOpen,
     handleSubmit,
-    // defaultValues,
+    defaultValues,
+    groups,
+    defaultGroupId,
 }: AddAccountDialog) {
     const [isRivals, setIsRivals] = useState(false);
+    const initialGroupId = useMemo(() => {
+        return (
+            defaultValues?.groupId ||
+            defaultGroupId ||
+            groups[0]?.id ||
+            ""
+        );
+    }, [defaultValues?.groupId, defaultGroupId, groups]);
+
+    useEffect(() => {
+        setIsRivals(defaultValues?.game === "Marvel Rivals");
+    }, [defaultValues?.game]);
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -61,7 +79,7 @@ export default function AddAccountDialog({
                                 onValueChange={(value) =>
                                     setIsRivals(value == "Marvel Rivals")
                                 }
-                                // value={defaultValues.game}
+                                defaultValue={defaultValues?.game ?? "None"}
                                 name="game"
                             >
                                 <SelectTrigger className="w-full py-5">
@@ -77,6 +95,7 @@ export default function AddAccountDialog({
                                     {Object.entries(games).map(
                                         ([game, img]) => (
                                             <SelectItem
+                                                key={game}
                                                 className="cursor-pointer"
                                                 value={game}
                                             >
@@ -99,13 +118,35 @@ export default function AddAccountDialog({
                             </Select>
                         </div>
                         <div className="space-y-2">
+                            <Label htmlFor="groupId">Group</Label>
+                            <Select
+                                name="groupId"
+                                defaultValue={initialGroupId}
+                            >
+                                <SelectTrigger className="w-full py-5">
+                                    <SelectValue placeholder="Select a group" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {groups.map((group) => (
+                                        <SelectItem
+                                            key={group.id}
+                                            value={group.id}
+                                            className="cursor-pointer"
+                                        >
+                                            {group.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
                             <Label htmlFor="username">
                                 {isRivals ? "Username (IGN)" : "Username"}
                             </Label>
                             <Input
                                 id="username"
                                 name="username"
-                                // value={defaultValues.username}
+                                defaultValue={defaultValues?.username ?? ""}
                                 required
                             />
                         </div>
@@ -115,7 +156,7 @@ export default function AddAccountDialog({
                                 id="password"
                                 name="password"
                                 type="password"
-                                // value={defaultValues.password}
+                                defaultValue={defaultValues?.password ?? ""}
                                 required
                                 showPasswordToggle
                             />
@@ -125,7 +166,7 @@ export default function AddAccountDialog({
                             <Textarea
                                 id="notes"
                                 name="notes"
-                                // value={defaultValues.notes}
+                                defaultValue={defaultValues?.notes ?? ""}
                                 className="min-h-[100px] resize-none"
                             />
                         </div>

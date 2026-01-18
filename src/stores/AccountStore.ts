@@ -1,12 +1,13 @@
 import { accountApi } from '@/services/AccountApi';
 import { authApi } from '@/services/AuthApi';
+import { groupApi } from '@/services/GroupApi';
 import {
     decryptAccountData,
     decryptMasterKey,
     encryptAccountData,
     encryptExistingMasterKey
 } from '@/utils/encryption';
-import { base64ToArrayBuffer, decryptDataToBase64, deriveEncryptionKey } from '@/utils/crypto';
+import { arrayBufferToBase64, base64ToArrayBuffer, decryptDataToBase64, deriveEncryptionKey } from '@/utils/crypto';
 import { LocalStorageStore } from '@/utils/localStorageCache';
 import { create } from 'zustand';
 
@@ -19,6 +20,13 @@ export interface RankCache {
     rank: string;
 }
 
+export interface AccountGroup {
+    id: string;
+    name: string;
+    usesMasterKey: boolean;
+    encryptedGroupKey?: string | null;
+}
+
 export interface Account {
     id: string;
     username: string;
@@ -28,6 +36,7 @@ export interface Account {
     isShared?: boolean;
     game?: "Marvel Rivals";
     isLoadingRank: boolean;
+    groupId?: string;
 }
 
 export interface EncryptedAccount {
@@ -49,6 +58,12 @@ interface AccountContextType {
     encryptedMasterKey: string | null;
     setEncryptedMasterKey: (key: string) => void;
 
+    groups: AccountGroup[];
+    groupKeys: Record<string, string>;
+    defaultGroupId: string | null;
+    loadGroups: () => Promise<void>;
+    createGroup: (name: string) => Promise<AccountGroup | null>;
+
     decryptedAccounts: Account[];
     loadAccounts: () => Promise<void>;
     loadSharedAccounts: () => Promise<void>;
@@ -59,7 +74,107 @@ interface AccountContextType {
     logout: () => void;
 }
 
-export const useAccountStore = create<AccountContextType>((set) => ({
+export const useAccountStore = create<AccountContextType>((set, get) => {
+    const resolveMasterKey = async (): Promise<string | null> => {
+        const { currentPassword, encryptedMasterKey } = get();
+        if (!currentPassword || !encryptedMasterKey) {
+            console.error("Password or encryption key is null.");
+            return null;
+        }
+
+        const decryptedKeyResult = await decryptMasterKey(
+            encryptedMasterKey,
+            currentPassword
+        );
+        if (!decryptedKeyResult.isUtf8Valid) {
+            console.error("Failed to decrypt master key - invalid UTF-8 data");
+            return null;
+        }
+
+        const decryptedKey = decryptedKeyResult.data;
+
+        if (decryptedKeyResult.wasLegacy) {
+            try {
+                const updatedEncryptedKey = await encryptExistingMasterKey(
+                    decryptedKey,
+                    currentPassword
+                );
+                await authApi.updateUserSecurityProfile(updatedEncryptedKey);
+                set({ encryptedMasterKey: updatedEncryptedKey });
+            } catch (error) {
+                console.warn("Failed to migrate encrypted master key:", error);
+            }
+        }
+
+        return decryptedKey;
+    };
+
+    const loadGroups = async (): Promise<void> => {
+        const masterKey = await resolveMasterKey();
+        if (!masterKey) return;
+
+        const response = await groupApi.getGroups();
+        if (!Array.isArray(response)) {
+            console.warn("Unexpected group response:", response);
+            return;
+        }
+        const groupKeys: Record<string, string> = {};
+        let defaultGroupId: string | null = null;
+
+        for (const group of response) {
+            if (group.usesMasterKey || !group.encryptedGroupKey) {
+                groupKeys[group.id] = masterKey;
+                if (group.usesMasterKey) {
+                    defaultGroupId = group.id;
+                }
+                continue;
+            }
+
+            try {
+                const decryptedResult = await decryptAccountData(
+                    group.encryptedGroupKey,
+                    masterKey
+                );
+                if (!decryptedResult.isUtf8Valid || !decryptedResult.data) {
+                    console.warn(`Failed to decrypt group key for ${group.name}`);
+                    continue;
+                }
+                groupKeys[group.id] = decryptedResult.data;
+            } catch (error) {
+                console.warn(`Failed to decrypt group key for ${group.name}:`, error);
+            }
+        }
+
+        if (!defaultGroupId) {
+            const masterGroup = response.find(group => group.usesMasterKey);
+            defaultGroupId = masterGroup?.id ?? null;
+        }
+
+        set({
+            groups: response,
+            groupKeys,
+            defaultGroupId
+        });
+    };
+
+    const createGroup = async (name: string): Promise<AccountGroup | null> => {
+        const masterKey = await resolveMasterKey();
+        if (!masterKey) return null;
+
+        const rawKey = crypto.getRandomValues(new Uint8Array(32));
+        const groupKey = arrayBufferToBase64(rawKey.buffer);
+        const encryptedGroupKey = await encryptAccountData(groupKey, masterKey);
+
+        const group = await groupApi.createGroup({
+            name,
+            encryptedGroupKey
+        });
+
+        await loadGroups();
+        return group;
+    };
+
+    return {
     isAuthenticated: false,
     setIsAuthenticated: (isAuthenticated) => set(() => ({
         isAuthenticated: isAuthenticated
@@ -80,35 +195,29 @@ export const useAccountStore = create<AccountContextType>((set) => ({
         encryptedMasterKey: key
     })),
 
+    groups: [],
+    groupKeys: {},
+    defaultGroupId: null,
+    loadGroups: async () => {
+        await loadGroups();
+    },
+    createGroup: async (name: string) => createGroup(name),
+
     decryptedAccounts: [],
     loadAccounts: async () => {
-        const password = useAccountStore.getState().currentPassword;
-        const encryptedKey = useAccountStore.getState().encryptedMasterKey;
+        const masterKey = await resolveMasterKey();
+        if (!masterKey) return;
 
-        if (!password || !encryptedKey) return console.error("Password or encryption key is null.");
+        if (Object.keys(get().groupKeys).length === 0) {
+            await loadGroups();
+        }
 
-        const decryptedKeyResult = await decryptMasterKey(encryptedKey, password);
-        if (!decryptedKeyResult.isUtf8Valid) {
-            console.error("Failed to decrypt master key - invalid UTF-8 data");
+        const { groupKeys, defaultGroupId, currentPassword } = get();
+        const response = await accountApi.getAccounts();
+        if (response.length === 0) {
+            set({ decryptedAccounts: [] });
             return;
         }
-        const decryptedKey = decryptedKeyResult.data;
-
-        if (decryptedKeyResult.wasLegacy) {
-            try {
-                const updatedEncryptedKey = await encryptExistingMasterKey(
-                    decryptedKey,
-                    password
-                );
-                await authApi.updateUserSecurityProfile(updatedEncryptedKey);
-                set({ encryptedMasterKey: updatedEncryptedKey });
-            } catch (error) {
-                console.warn("Failed to migrate encrypted master key:", error);
-            }
-        }
-
-        const response = await accountApi.getAccounts();
-        if (response.length === 0) return;
 
         try {
             const migrationTasks: Promise<void>[] = [];
@@ -117,23 +226,32 @@ export const useAccountStore = create<AccountContextType>((set) => ({
                     console.warn(`Invalid encrypted account data found, skipping ${encryptedAccount.id}`);
                     return null;
                 }
-                
+
+                const resolvedGroupId = encryptedAccount.groupId || defaultGroupId || undefined;
+                const groupKey = resolvedGroupId && groupKeys[resolvedGroupId]
+                    ? groupKeys[resolvedGroupId]
+                    : masterKey;
+
+                if (resolvedGroupId && !groupKeys[resolvedGroupId]) {
+                    console.warn(`Missing group key for ${resolvedGroupId}, falling back to master key`);
+                }
+
                 try {
                     let decryptedResult = await decryptAccountData(
                         encryptedAccount.encryptedData,
-                        decryptedKey,
-                        password
+                        groupKey,
+                        currentPassword ?? undefined
                     );
                     if (!decryptedResult.isUtf8Valid) {
                         console.warn(`Account ${encryptedAccount.id} contained invalid UTF-8 data, skipping`);
                         return null;
                     }
-                    
+
                     if (!decryptedResult.data || decryptedResult.data.trim() === '') {
                         console.warn(`Account ${encryptedAccount.id} had empty decrypted data, skipping`);
                         return null;
                     }
-                    
+
                     let parsedData: Account | null = null;
                     try {
                         parsedData = JSON.parse(decryptedResult.data);
@@ -142,34 +260,35 @@ export const useAccountStore = create<AccountContextType>((set) => ({
                             return null;
                         }
 
-                        if (
-                            decryptedResult.wasLegacy &&
-                            encryptedAccount.id
-                        ) {
+                        if (decryptedResult.wasLegacy && encryptedAccount.id) {
                             migrationTasks.push(
                                 (async () => {
                                     const migrated = await encryptAccountData(
                                         decryptedResult.data,
-                                        decryptedKey
+                                        groupKey
                                     );
                                     await accountApi.editAccount(
                                         encryptedAccount.id,
-                                        { encryptedData: migrated }
+                                        {
+                                            encryptedData: migrated,
+                                            groupId: resolvedGroupId
+                                        }
                                     );
                                 })()
                             );
                         }
-                        return { 
-                            ...parsedData, 
+                        return {
+                            ...parsedData,
                             id: encryptedAccount.id,
-                            isLoadingRank: false 
+                            groupId: resolvedGroupId,
+                            isLoadingRank: false
                         };
                     } catch (parseError) {
-                        if (password && !decryptedResult.usedFallbackPassword) {
+                        if (currentPassword && !decryptedResult.usedFallbackPassword) {
                             decryptedResult = await decryptAccountData(
                                 encryptedAccount.encryptedData,
-                                decryptedKey,
-                                password,
+                                groupKey,
+                                currentPassword,
                                 true
                             );
                             if (
@@ -184,19 +303,19 @@ export const useAccountStore = create<AccountContextType>((set) => ({
                                         return null;
                                     }
 
-                                    if (
-                                        decryptedResult.wasLegacy &&
-                                        encryptedAccount.id
-                                    ) {
+                                    if (decryptedResult.wasLegacy && encryptedAccount.id) {
                                         migrationTasks.push(
                                             (async () => {
                                                 const migrated = await encryptAccountData(
                                                     decryptedResult.data,
-                                                    decryptedKey
+                                                    groupKey
                                                 );
                                                 await accountApi.editAccount(
                                                     encryptedAccount.id,
-                                                    { encryptedData: migrated }
+                                                    {
+                                                        encryptedData: migrated,
+                                                        groupId: resolvedGroupId
+                                                    }
                                                 );
                                             })()
                                         );
@@ -205,6 +324,7 @@ export const useAccountStore = create<AccountContextType>((set) => ({
                                     return {
                                         ...parsedData,
                                         id: encryptedAccount.id,
+                                        groupId: resolvedGroupId,
                                         isLoadingRank: false
                                     };
                                 } catch (fallbackParseError) {
@@ -234,36 +354,45 @@ export const useAccountStore = create<AccountContextType>((set) => ({
         }
     },
     loadSharedAccounts: async () => {
-        const password = useAccountStore.getState().currentPassword;
+        const password = get().currentPassword;
         if (!password) return console.error("Password is null.");
 
         try {
             const response = await accountApi.getSharedAccounts();
+            const groupKeyCache: Record<string, string> = {};
             const accounts: Account[] = await Promise.all(response.encryptedAccounts.map(async (encryptedAccount) => {
                 if (!encryptedAccount || !encryptedAccount.encryptedData) {
                     console.warn(`Invalid shared encrypted account data found, skipping`);
                     return null;
                 }
 
-                if (!encryptedAccount.encryptedMasterKey || !encryptedAccount.iv || !encryptedAccount.salt || !encryptedAccount.tag) {
+                if (!encryptedAccount.encryptedGroupKey || !encryptedAccount.iv || !encryptedAccount.salt || !encryptedAccount.tag) {
                     console.warn(`Shared account missing key material, skipping`);
                     return null;
                 }
                 
                 try {
-                    const derivedKey = await deriveEncryptionKey(
-                        password,
-                        base64ToArrayBuffer(encryptedAccount.salt)
-                    );
-                    const sharedMasterKey = await decryptDataToBase64(
-                        encryptedAccount.encryptedMasterKey,
-                        encryptedAccount.iv,
-                        encryptedAccount.tag,
-                        derivedKey
-                    );
+                    const cacheKey = encryptedAccount.groupId ?? "";
+                    let sharedGroupKey = cacheKey ? groupKeyCache[cacheKey] : undefined;
+
+                    if (!sharedGroupKey) {
+                        const derivedKey = await deriveEncryptionKey(
+                            password,
+                            base64ToArrayBuffer(encryptedAccount.salt)
+                        );
+                        sharedGroupKey = await decryptDataToBase64(
+                            encryptedAccount.encryptedGroupKey,
+                            encryptedAccount.iv,
+                            encryptedAccount.tag,
+                            derivedKey
+                        );
+                        if (cacheKey) {
+                            groupKeyCache[cacheKey] = sharedGroupKey;
+                        }
+                    }
                     const decryptedResult = await decryptAccountData(
                         encryptedAccount.encryptedData,
-                        sharedMasterKey
+                        sharedGroupKey
                     );
                     if (!decryptedResult.isUtf8Valid) {
                         console.warn(`Shared account ${encryptedAccount.id} contained invalid UTF-8 data, skipping`);
@@ -284,6 +413,7 @@ export const useAccountStore = create<AccountContextType>((set) => ({
                         return { 
                             ...parsedData, 
                             id: encryptedAccount.id ?? "",
+                            groupId: encryptedAccount.groupId,
                             isShared: true,
                             isLoadingRank: false 
                         };
@@ -356,7 +486,11 @@ export const useAccountStore = create<AccountContextType>((set) => ({
             currentPassword: null,
             currentEmail: null,
             encryptedMasterKey: null,
+            groups: [],
+            groupKeys: {},
+            defaultGroupId: null,
             decryptedAccounts: []
         }));
     }
-}))
+    };
+});

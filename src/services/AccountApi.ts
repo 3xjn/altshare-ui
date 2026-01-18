@@ -2,17 +2,20 @@ import { ApiService } from './ApiService';
 
 interface AddAccountRequest {
     encryptedData: string;
+    groupId?: string;
 }
 
 interface EncryptedAccount {
     id: string;
     encryptedData: string;
+    groupId?: string;
 }
 
 interface SharedEncryptedAccount {
     id?: string;
     encryptedData: string;
-    encryptedMasterKey: string;
+    groupId?: string;
+    encryptedGroupKey: string;
     iv: string;
     salt: string;
     tag: string;
@@ -20,7 +23,8 @@ interface SharedEncryptedAccount {
 
 interface CreateSharingRequest {
     sharedWithEmail: string;
-    encryptedMasterKey: string;
+    groupId: string;
+    encryptedGroupKey: string;
     iv: string;
     salt: string;
     tag: string;
