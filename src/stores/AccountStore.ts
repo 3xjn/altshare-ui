@@ -34,7 +34,8 @@ export interface Account {
     notes?: string;
     rank?: string;
     isShared?: boolean;
-    game?: "Marvel Rivals";
+    game?: string;
+    gameData?: Record<string, string>;
     isLoadingRank: boolean;
     groupId?: string;
 }

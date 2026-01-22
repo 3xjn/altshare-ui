@@ -21,6 +21,7 @@ import {
 import { Dispatch, SetStateAction, useEffect, useMemo, useState } from "react";
 import { Stack } from "./ui/stack";
 import type { AccountGroup } from "@/stores/AccountStore";
+import { GAME_CATALOG, GameId, getGameConfig } from "@/config/games";
 
 interface DefaultValues {
     game?: string;
@@ -28,6 +29,7 @@ interface DefaultValues {
     password?: string;
     notes?: string;
     groupId?: string;
+    gameData?: Record<string, string>;
 }
 interface AddAccountDialog {
     open: boolean;
@@ -38,8 +40,6 @@ interface AddAccountDialog {
     defaultGroupId: string | null;
 }
 
-const games = { "Marvel Rivals": "./images/marvel-rivals.png" };
-
 export default function AddAccountDialog({
     open,
     setOpen,
@@ -48,7 +48,7 @@ export default function AddAccountDialog({
     groups,
     defaultGroupId,
 }: AddAccountDialog) {
-    const [isRivals, setIsRivals] = useState(false);
+    const [selectedGame, setSelectedGame] = useState<GameId>("None");
     const initialGroupId = useMemo(() => {
         return (
             defaultValues?.groupId ||
@@ -59,8 +59,37 @@ export default function AddAccountDialog({
     }, [defaultValues?.groupId, defaultGroupId, groups]);
 
     useEffect(() => {
-        setIsRivals(defaultValues?.game === "Marvel Rivals");
+        const gameConfig = getGameConfig(defaultValues?.game);
+        setSelectedGame(gameConfig.id);
     }, [defaultValues?.game]);
+
+    const selectedConfig = getGameConfig(selectedGame);
+    const gameFields = selectedConfig.fields ?? [];
+
+    const renderGameIcon = (label: string, icon?: string) => {
+        if (icon) {
+            return (
+                <img
+                    className="w-[30px] h-[30px] object-cover rounded-md"
+                    src={icon}
+                    alt={label}
+                />
+            );
+        }
+
+        const initials = label
+            .split(" ")
+            .map((word) => word[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase();
+
+        return (
+            <div className="w-[30px] h-[30px] rounded-md bg-muted text-xs font-semibold text-muted-foreground flex items-center justify-center">
+                {initials}
+            </div>
+        );
+    };
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -77,43 +106,34 @@ export default function AddAccountDialog({
                             <Label htmlFor="game">Game</Label>
                             <Select
                                 onValueChange={(value) =>
-                                    setIsRivals(value == "Marvel Rivals")
+                                    setSelectedGame(value as GameId)
                                 }
-                                defaultValue={defaultValues?.game ?? "None"}
+                                value={selectedGame}
                                 name="game"
                             >
                                 <SelectTrigger className="w-full py-5">
                                     <SelectValue placeholder="None" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem
-                                        value="None"
-                                        className="cursor-pointer flex items-center"
-                                    >
-                                        None
-                                    </SelectItem>
-                                    {Object.entries(games).map(
-                                        ([game, img]) => (
-                                            <SelectItem
-                                                key={game}
-                                                className="cursor-pointer"
-                                                value={game}
+                                    {GAME_CATALOG.map((game) => (
+                                        <SelectItem
+                                            key={game.id}
+                                            className="cursor-pointer"
+                                            value={game.id}
+                                        >
+                                            <Stack
+                                                direction="row"
+                                                align="center"
+                                                spacing="small"
                                             >
-                                                <Stack
-                                                    direction="row"
-                                                    align="center"
-                                                    spacing="small"
-                                                >
-                                                    <img
-                                                        className="w-[30px] h-[30px] object-cover rounded-md"
-                                                        src={img}
-                                                        alt={game}
-                                                    />
-                                                    <span>{game}</span>
-                                                </Stack>
-                                            </SelectItem>
-                                        )
-                                    )}
+                                                {renderGameIcon(
+                                                    game.label,
+                                                    game.icon
+                                                )}
+                                                <span>{game.label}</span>
+                                            </Stack>
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -141,7 +161,7 @@ export default function AddAccountDialog({
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="username">
-                                {isRivals ? "Username (IGN)" : "Username"}
+                                {selectedConfig.usernameLabel ?? "Username"}
                             </Label>
                             <Input
                                 id="username"
@@ -161,6 +181,43 @@ export default function AddAccountDialog({
                                 showPasswordToggle
                             />
                         </div>
+                        {gameFields.length > 0 && (
+                            <div className="space-y-4 rounded-md border border-dashed border-muted-foreground/30 p-3">
+                                <div className="text-sm font-medium text-foreground">
+                                    Game-specific fields
+                                </div>
+                                {gameFields.map((field) => (
+                                    <div
+                                        key={field.id}
+                                        className="space-y-2"
+                                    >
+                                        <Label htmlFor={`gameField-${field.id}`}>
+                                            {field.label}
+                                        </Label>
+                                        <Input
+                                            id={`gameField-${field.id}`}
+                                            name={`gameField__${field.id}`}
+                                            type={field.type ?? "text"}
+                                            inputMode={field.inputMode}
+                                            defaultValue={
+                                                defaultValues?.gameData?.[
+                                                    field.id
+                                                ] ?? ""
+                                            }
+                                            placeholder={field.placeholder}
+                                            showPasswordToggle={
+                                                field.type === "password"
+                                            }
+                                        />
+                                        {field.helperText && (
+                                            <p className="text-xs text-muted-foreground">
+                                                {field.helperText}
+                                            </p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                         <div className="space-y-2">
                             <Label htmlFor="notes">Notes</Label>
                             <Textarea

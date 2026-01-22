@@ -34,6 +34,14 @@ interface SharedAccountResponse {
     encryptedAccounts: SharedEncryptedAccount[];
 }
 
+export interface SharingRelationship {
+    id: string;
+    sharedWithEmail: string;
+    groupId: string;
+    groupName: string;
+    createdAt: string;
+}
+
 interface RankResponse {
     rank: string;
 }
@@ -65,6 +73,15 @@ export class AccountApi extends ApiService {
     async getSharedAccounts(): Promise<SharedAccountResponse> {
         const response = await this.api.get(`${this.route}/share`);
         return response.data;
+    }
+
+    async getSharingRelationships(): Promise<SharingRelationship[]> {
+        const response = await this.api.get(`${this.route}/share/relationships`);
+        return response.data;
+    }
+
+    async revokeSharingRelationship(id: string): Promise<void> {
+        await this.api.delete(`${this.route}/share/relationships/${id}`);
     }
 
     async getRank(username: string): Promise<RankResponse> {

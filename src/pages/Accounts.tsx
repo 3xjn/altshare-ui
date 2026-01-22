@@ -9,7 +9,18 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil, Trash2, RefreshCcw, Settings, Lock, Share } from "lucide-react";
+import {
+    Plus,
+    Pencil,
+    Trash2,
+    RefreshCcw,
+    Settings,
+    Lock,
+    Share,
+    Eye,
+    ChevronDown,
+    ChevronUp,
+} from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -30,7 +41,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { Account, useAccountStore } from "@/stores/AccountStore";
 import { decryptMasterKey, encryptAccountData } from "@/utils/encryption";
-import { accountApi } from "@/services/AccountApi";
+import { accountApi, SharingRelationship } from "@/services/AccountApi";
 import { useToast } from "@/hooks/use-toast";
 import { PasswordPrompt } from "@/components/PasswordPrompt";
 import { ExpandableNotes } from "@/components/ui/expandable-notes";
@@ -52,6 +63,7 @@ import AddAccountDialog from "@/components/AddAccountDialog";
 import { Stack } from "@/components/ui/stack";
 import { getImageFromRank } from "@/utils/getImageFromRank";
 import { base64ToArrayBuffer } from "@/utils/crypto";
+import { getGameConfig } from "@/config/games";
 
 export function Accounts() {
     const {
@@ -72,7 +84,6 @@ export function Accounts() {
     } = useAccountStore();
     const [isLoading, setIsLoading] = useState(true);
     const [createOpen, setCreateOpen] = useState(false);
-    const [inviteOpen, setInviteOpen] = useState(false);
     const { toast } = useToast();
     const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
     const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -83,6 +94,17 @@ export function Accounts() {
     const [inviteCode, setInviteCode] = useState<string | null>(null);
     const [peer, setPeer] = useState<PeerService | null>(null);
     const [shareOpen, setShareOpen] = useState(false);
+    const [sharingDrawerOpen, setSharingDrawerOpen] = useState(false);
+    const [sharingTab, setSharingTab] = useState<"accounts" | "invites">(
+        "accounts"
+    );
+    const [sharingRelationships, setSharingRelationships] = useState<
+        SharingRelationship[]
+    >([]);
+    const [isSharingLoading, setIsSharingLoading] = useState(false);
+    const [revokeTarget, setRevokeTarget] =
+        useState<SharingRelationship | null>(null);
+    const [isRevokingShare, setIsRevokingShare] = useState(false);
     const [shareGroupId, setShareGroupId] = useState<string | null>(null);
     const [inviteeEmail, setInviteeEmail] = useState<string | null>(null);
     const [activeGroupId, setActiveGroupId] = useState<string>("all");
@@ -91,6 +113,13 @@ export function Accounts() {
     const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(
         new Set()
     );
+    const [detailsMode, setDetailsMode] = useState<"accordion" | "drawer">(
+        "accordion"
+    );
+    const [expandedAccountKeys, setExpandedAccountKeys] = useState<
+        Set<string>
+    >(new Set());
+    const [drawerAccount, setDrawerAccount] = useState<Account | null>(null);
     const [contextMenuAccountId, setContextMenuAccountId] = useState<
         string | null
     >(null);
@@ -102,6 +131,9 @@ export function Accounts() {
     }, [groups]);
 
     const lastSelectedIndexRef = useRef<number | null>(null);
+    const contextMenuPositionRef = useRef<{ x: number; y: number } | null>(
+        null
+    );
 
     useEffect(() => {
         const initializeAccounts = async () => {
@@ -134,11 +166,9 @@ export function Accounts() {
 
     useEffect(() => {
         return () => {
-            if (signalRService && !inviteOpen) {
-                signalRService.disconnect();
-            }
+            signalRService?.disconnect();
         };
-    }, [signalRService, inviteOpen]);
+    }, [signalRService]);
 
     useEffect(() => {
         if (!shareOpen) return;
@@ -150,6 +180,11 @@ export function Accounts() {
 
         setShareGroupId(initialGroupId ?? null);
     }, [shareOpen, activeGroupId, defaultGroupId]);
+
+    useEffect(() => {
+        if (!sharingDrawerOpen || sharingTab !== "accounts") return;
+        loadSharingRelationships();
+    }, [sharingDrawerOpen, sharingTab]);
 
     useEffect(() => {
         const validIds = new Set(
@@ -175,6 +210,11 @@ export function Accounts() {
             prev && validIds.has(prev) ? prev : null
         );
     }, [decryptedAccounts]);
+
+    useEffect(() => {
+        setExpandedAccountKeys(new Set());
+        setDrawerAccount(null);
+    }, [detailsMode]);
 
     const handleRefresh = async () => {
         if (!currentPassword) {
@@ -246,6 +286,7 @@ export function Accounts() {
                     password: account.password,
                     notes: account.notes ?? "",
                     game: account.game ?? "",
+                    gameData: account.gameData ?? {},
                     groupId: resolvedGroupId,
                     groupName: resolvedGroupId
                         ? groupLookup.get(resolvedGroupId) ?? "Personal"
@@ -278,11 +319,26 @@ export function Accounts() {
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const formData = new FormData(e.currentTarget);
+        const gameValue = (formData.get("game") as string) || "None";
+        const normalizedGame =
+            gameValue && gameValue !== "None" ? gameValue : undefined;
+        const gameDataEntries = Array.from(formData.entries()).filter(
+            ([key, value]) => key.startsWith("gameField__") && value
+        );
+        const gameData = gameDataEntries.reduce<Record<string, string>>(
+            (acc, [key, value]) => {
+                const fieldKey = key.replace("gameField__", "");
+                acc[fieldKey] = String(value);
+                return acc;
+            },
+            {}
+        );
         const accountData = {
             username: formData.get("username") as string,
             password: formData.get("password") as string,
             notes: (formData.get("notes") as string) || "",
-            game: (formData.get("game") as string) || "",
+            game: normalizedGame,
+            gameData: Object.keys(gameData).length > 0 ? gameData : undefined,
             groupId: (formData.get("groupId") as string) || undefined,
         };
 
@@ -314,6 +370,7 @@ export function Accounts() {
         password: string;
         notes: string;
         game?: string;
+        gameData?: Record<string, string>;
         groupId?: string;
     }) => {
         const { groupId, ...payload } = accountData;
@@ -345,6 +402,7 @@ export function Accounts() {
         password: string;
         notes: string;
         game?: string;
+        gameData?: Record<string, string>;
         groupId?: string;
     }) => {
         if (!editingAccount?.id) {
@@ -385,11 +443,29 @@ export function Accounts() {
             const form = document.querySelector("form") as HTMLFormElement;
             if (form) {
                 const formData = new FormData(form);
+                const gameValue = (formData.get("game") as string) || "None";
+                const normalizedGame =
+                    gameValue && gameValue !== "None" ? gameValue : undefined;
+                const gameDataEntries = Array.from(formData.entries()).filter(
+                    ([key, value]) => key.startsWith("gameField__") && value
+                );
+                const gameData = gameDataEntries.reduce<Record<string, string>>(
+                    (acc, [key, value]) => {
+                        const fieldKey = key.replace("gameField__", "");
+                        acc[fieldKey] = String(value);
+                        return acc;
+                    },
+                    {}
+                );
                 const accountData = {
                     username: formData.get("username") as string,
                     password: formData.get("password") as string,
                     notes: (formData.get("notes") as string) || "",
-                    game: (formData.get("game") as string) || "",
+                    game: normalizedGame,
+                    gameData:
+                        Object.keys(gameData).length > 0
+                            ? gameData
+                            : undefined,
                     groupId: (formData.get("groupId") as string) || undefined,
                 };
 
@@ -498,6 +574,10 @@ export function Accounts() {
         if (event.defaultPrevented) return;
 
         event.preventDefault();
+        contextMenuPositionRef.current = {
+            x: event.clientX,
+            y: event.clientY,
+        };
 
         const currentIndex = orderedSelectableIds.indexOf(account.id);
         if (currentIndex >= 0) {
@@ -513,6 +593,27 @@ export function Accounts() {
 
         setContextMenuAccountId(account.id);
     };
+
+    const toggleAccountDetails = (
+        account: Account,
+        detailKey: string
+    ) => {
+        if (detailsMode === "accordion") {
+            setExpandedAccountKeys((prev) => {
+                const next = new Set(prev);
+                if (next.has(detailKey)) {
+                    next.delete(detailKey);
+                } else {
+                    next.add(detailKey);
+                }
+                return next;
+            });
+            return;
+        }
+
+        setDrawerAccount(account);
+    };
+
     const handleDelete = async (account: Account) => {
         if (!account.id) {
             toast({
@@ -540,13 +641,73 @@ export function Accounts() {
         }
     };
 
-    const handleInviteClick = async () => {
-        if (isConnecting) return;
-        setInviteOpen(true);
+    const openSharingDrawer = (tab: "accounts" | "invites") => {
+        setSharingTab(tab);
+        setSharingDrawerOpen(true);
+    };
+
+    const clearInviteSession = () => {
+        signalRService?.disconnect();
+        setSignalRService(null);
+        setPeer(null);
+        setIsConnecting(false);
         setInviteCode(null);
         setInviteeEmail(null);
+        setShareOpen(false);
+    };
 
-        if (searchParams.get("test") === "true") {
+    const loadSharingRelationships = async () => {
+        try {
+            setIsSharingLoading(true);
+            const response = await accountApi.getSharingRelationships();
+            setSharingRelationships(response);
+        } catch (error) {
+            console.error("Failed to load sharing relationships:", error);
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description:
+                    "Failed to load shared access. Please try again.",
+            });
+        } finally {
+            setIsSharingLoading(false);
+        }
+    };
+
+    const handleRevokeShare = async () => {
+        if (!revokeTarget) return;
+
+        try {
+            setIsRevokingShare(true);
+            await accountApi.revokeSharingRelationship(revokeTarget.id);
+            setSharingRelationships((prev) =>
+                prev.filter(
+                    (relationship) => relationship.id !== revokeTarget.id
+                )
+            );
+            toast({
+                title: "Access revoked",
+                description: `Removed access for ${revokeTarget.sharedWithEmail}.`,
+            });
+            setRevokeTarget(null);
+        } catch (error) {
+            console.error("Failed to revoke sharing relationship:", error);
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Failed to revoke access. Please try again.",
+            });
+        } finally {
+            setIsRevokingShare(false);
+        }
+    };
+
+    const handleInviteClick = async () => {
+        if (isConnecting) return;
+        openSharingDrawer("invites");
+        clearInviteSession();
+
+        if (isTestMode) {
             setIsConnecting(true);
             setTimeout(() => {
                 setIsConnecting(false);
@@ -622,12 +783,15 @@ export function Accounts() {
                         tag: payload.encryptedKey.tag,
                     });
 
-                    newPeer?.sendMessage("sharingConfirmation", { success: true });
+                    await loadSharingRelationships();
+                    newPeer?.sendMessage("sharingConfirmation", {
+                        success: true,
+                    });
                     toast({
                         title: "Success",
                         description: "Account sharing verified successfully.",
                     });
-                    setShareOpen(false);
+                    clearInviteSession();
                 } catch (error) {
                     console.error("Share verification failed:", error);
                     toast({
@@ -639,8 +803,9 @@ export function Accounts() {
             });
 
             newPeer.onConnect = () => {
-                setInviteOpen(false);
                 setShareOpen(true);
+                setSharingDrawerOpen(true);
+                setSharingTab("invites");
             };
 
             await service.connect();
@@ -911,6 +1076,7 @@ export function Accounts() {
                         password: account.password,
                         notes: account.notes ?? "",
                         game: account.game ?? "",
+                        gameData: account.gameData ?? undefined,
                     };
                     const encryptedData = await encryptAccountData(
                         JSON.stringify(payload),
@@ -981,12 +1147,177 @@ export function Accounts() {
         }
     };
 
-    const shareGroupName = useMemo(() => {
-        if (!shareGroupId) {
-            return groupLookup.get(defaultGroupId ?? "") ?? "Personal";
+    const renderGameIcon = (label: string, icon?: string) => {
+        if (icon) {
+            return (
+                <img
+                    className="w-8 h-8 rounded-md object-cover"
+                    src={icon}
+                    alt={label}
+                />
+            );
         }
-        return groupLookup.get(shareGroupId) ?? "Personal";
-    }, [shareGroupId, defaultGroupId, groupLookup]);
+
+        const initials = label
+            .split(" ")
+            .map((word) => word[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase();
+
+        return (
+            <div className="w-8 h-8 rounded-md bg-muted text-xs font-semibold text-muted-foreground flex items-center justify-center">
+                {initials}
+            </div>
+        );
+    };
+
+    const renderGameBadge = (game?: string) => {
+        const gameConfig = getGameConfig(game);
+        return (
+            <Stack direction="row" align="center" spacing="small">
+                {renderGameIcon(gameConfig.label, gameConfig.icon)}
+                <span
+                    className={
+                        gameConfig.id === "None"
+                            ? "text-sm text-muted-foreground"
+                            : "text-sm text-foreground"
+                    }
+                >
+                    {gameConfig.label}
+                </span>
+            </Stack>
+        );
+    };
+
+    const getAccountGroupName = (account: Account) => {
+        if (account.isShared) {
+            return (
+                groupLookup.get(account.groupId ?? "") ??
+                "Shared"
+            );
+        }
+
+        const resolvedGroupId =
+            account.groupId ?? defaultGroupId ?? null;
+        return resolvedGroupId
+            ? groupLookup.get(resolvedGroupId) ?? "Personal"
+            : "Personal";
+    };
+
+    const renderDerivedGameDetails = (account: Account) => {
+        const gameConfig = getGameConfig(account.game);
+
+        if (gameConfig.id !== "Marvel Rivals") {
+            return null;
+        }
+
+        return (
+            <div className="space-y-2">
+                <div className="text-sm font-medium text-foreground">Rank</div>
+                <Stack direction="row" align="center" spacing="small">
+                    {account.isLoadingRank ? (
+                        <CircularProgress />
+                    ) : (
+                        account.rank && (
+                            <img
+                                className="w-[30px] h-[30px] object-cover rounded-md"
+                                src={getImageFromRank(account.rank)}
+                                alt={account.rank}
+                            />
+                        )
+                    )}
+                    {!account.isLoadingRank &&
+                        (account.rank ? (
+                            <span>{account.rank}</span>
+                        ) : (
+                            <Lock color="gray" />
+                        ))}
+                </Stack>
+            </div>
+        );
+    };
+
+    const renderDetailsContent = (account: Account) => {
+        const gameConfig = getGameConfig(account.game);
+        const gameFields = gameConfig.fields ?? [];
+        const derivedDetails = renderDerivedGameDetails(account);
+
+        return (
+            <div className="grid gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                            Game
+                        </div>
+                        {renderGameBadge(account.game)}
+                    </div>
+                    <div className="space-y-1">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                            Group
+                        </div>
+                        <div className="text-sm text-foreground">
+                            {getAccountGroupName(account)}
+                        </div>
+                    </div>
+                </div>
+                {derivedDetails ? (
+                    <div className="space-y-2">
+                        <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                            Game data
+                        </div>
+                        {derivedDetails}
+                    </div>
+                ) : null}
+                <div className="space-y-3">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                        Game-specific fields
+                    </div>
+                    {gameFields.length > 0 ? (
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            {gameFields.map((field) => {
+                                const value =
+                                    account.gameData?.[field.id] ?? "";
+                                return (
+                                    <div
+                                        key={field.id}
+                                        className="space-y-2"
+                                    >
+                                        <div className="text-sm font-medium text-foreground">
+                                            {field.label}
+                                        </div>
+                                        {value ? (
+                                            field.type === "password" ? (
+                                                <TextLabel
+                                                    content={value}
+                                                    showCopyButton
+                                                    showEyeButton
+                                                />
+                                            ) : (
+                                                <span className="text-sm text-foreground">
+                                                    {value}
+                                                </span>
+                                            )
+                                        ) : (
+                                            <span className="text-sm text-muted-foreground">
+                                                Not set
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">
+                            No game-specific fields for {gameConfig.label}.
+                        </p>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    const drawerOpen = detailsMode === "drawer" && !!drawerAccount;
 
     if (!isAuthenticated && !isTestMode) {
         return <Navigate to="/login" replace />;
@@ -1056,6 +1387,15 @@ export function Accounts() {
                                 </DropdownMenuLabel>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
+                                    onClick={() =>
+                                        openSharingDrawer("accounts")
+                                    }
+                                    className="cursor-pointer"
+                                >
+                                    Manage sharing
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
                                     onClick={handleExportData}
                                     className="cursor-pointer"
                                 >
@@ -1103,6 +1443,26 @@ export function Accounts() {
                             >
                                 New group
                             </Button>
+                            <Select
+                                value={detailsMode}
+                                onValueChange={(value) =>
+                                    setDetailsMode(
+                                        value as "accordion" | "drawer"
+                                    )
+                                }
+                            >
+                                <SelectTrigger className="w-[170px]">
+                                    <SelectValue placeholder="Details view" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="accordion">
+                                        Inline details
+                                    </SelectItem>
+                                    <SelectItem value="drawer">
+                                        Side panel
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
                         {selectedCount > 0 && (
                             <DropdownMenu>
@@ -1162,7 +1522,7 @@ export function Accounts() {
                         <Table className="select-none">
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="w-[75px]">
+                                    <TableHead className="w-[140px]">
                                         Game
                                     </TableHead>
                                     <TableHead className="w-[200px]">
@@ -1171,11 +1531,8 @@ export function Accounts() {
                                     <TableHead className="w-[200px]">
                                         Password
                                     </TableHead>
-                                    <TableHead className="w-[200px]">
-                                        Rank
-                                    </TableHead>
                                     <TableHead>Notes</TableHead>
-                                    <TableHead className="w-[100px] text-right">
+                                    <TableHead className="w-[130px] text-right">
                                         Actions
                                     </TableHead>
                                 </TableRow>
@@ -1183,7 +1540,7 @@ export function Accounts() {
                             <TableBody>
                                 {isLoading ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-32">
+                                        <TableCell colSpan={5} className="h-32">
                                             <div className="flex items-center justify-center gap-3">
                                                 <svg
                                                     className="animate-spin h-5 w-5 text-muted-foreground"
@@ -1213,7 +1570,7 @@ export function Accounts() {
                                     </TableRow>
                                 ) : totalAccounts === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-32">
+                                        <TableCell colSpan={5} className="h-32">
                                             <div className="flex flex-col items-center justify-center text-center">
                                                 <h3 className="font-medium">
                                                     No accounts yet
@@ -1230,7 +1587,7 @@ export function Accounts() {
                                         <Fragment key={`section-${section.id}`}>
                                             <TableRow className="bg-muted/30">
                                                 <TableCell
-                                                    colSpan={6}
+                                                    colSpan={5}
                                                     className="text-sm font-semibold text-foreground"
                                                 >
                                                     <div className="flex items-center justify-between">
@@ -1253,10 +1610,30 @@ export function Accounts() {
                                                 const rowKey = account.id
                                                     ? account.id
                                                     : `${section.id}-${index}`;
+                                                const detailKey = account.id
+                                                    ? account.id
+                                                    : rowKey;
+                                                const isExpanded =
+                                                    detailsMode === "accordion" &&
+                                                    expandedAccountKeys.has(
+                                                        detailKey
+                                                    );
                                                 const isContextMenuOpen =
                                                     isSelectable &&
                                                     account.id ===
                                                         contextMenuAccountId;
+                                                const DetailsIcon =
+                                                    detailsMode === "accordion"
+                                                        ? isExpanded
+                                                            ? ChevronUp
+                                                            : ChevronDown
+                                                        : Eye;
+                                                const detailsLabel =
+                                                    detailsMode === "accordion"
+                                                        ? isExpanded
+                                                            ? "Collapse details"
+                                                            : "Expand details"
+                                                        : "View details";
                                                 const rowClassName = [
                                                     "group hover:bg-accent/5",
                                                     "select-none",
@@ -1271,21 +1648,22 @@ export function Accounts() {
                                                     .join(" ");
 
                                                 return (
-                                                    <DropdownMenu
-                                                        key={rowKey}
-                                                        open={isContextMenuOpen}
-                                                        onOpenChange={(open) => {
-                                                            if (
-                                                                !open &&
-                                                                isContextMenuOpen
-                                                            ) {
-                                                                setContextMenuAccountId(
-                                                                    null
-                                                                );
-                                                            }
-                                                        }}
-                                                    >
-                                                        <DropdownMenuTrigger asChild>
+                                                    <Fragment key={rowKey}>
+                                                        <DropdownMenu
+                                                            open={isContextMenuOpen}
+                                                            onOpenChange={(open) => {
+                                                                if (
+                                                                    !open &&
+                                                                    isContextMenuOpen
+                                                                ) {
+                                                                    setContextMenuAccountId(
+                                                                        null
+                                                                    );
+                                                                    contextMenuPositionRef.current =
+                                                                        null;
+                                                                }
+                                                            }}
+                                                        >
                                                             <TableRow
                                                                 className={
                                                                     rowClassName
@@ -1329,15 +1707,9 @@ export function Accounts() {
                                                                 }
                                                             >
                                                                 <TableCell>
-                                                                    <img
-                                                                        className="w-10 h-10 rounded-lg"
-                                                                        src={
-                                                                            account.game ===
-                                                                            "Marvel Rivals"
-                                                                                ? "./images/marvel-rivals.png"
-                                                                                : ""
-                                                                        }
-                                                                    />
+                                                                    {renderGameBadge(
+                                                                        account.game
+                                                                    )}
                                                                 </TableCell>
                                                                 <TableCell className="font-medium">
                                                                     <TextLabel
@@ -1357,35 +1729,6 @@ export function Accounts() {
                                                                     />
                                                                 </TableCell>
                                                                 <TableCell>
-                                                                    <Stack
-                                                                        direction="row"
-                                                                        align="center"
-                                                                        spacing="small"
-                                                                    >
-                                                                        {account.isLoadingRank ? (
-                                                                            <CircularProgress />
-                                                                        ) : (
-                                                                            account.rank && (
-                                                                                <img
-                                                                                    className="w-[30px] h-[30px] object-cover rounded-md"
-                                                                                    src={getImageFromRank(
-                                                                                        account.rank
-                                                                                    )}
-                                                                                    alt={account.rank}
-                                                                                />
-                                                                            )
-                                                                        )}
-                                                                        {!account.isLoadingRank &&
-                                                                            (account.rank ? (
-                                                                                <span>
-                                                                                    {account.rank}
-                                                                                </span>
-                                                                            ) : (
-                                                                                <Lock color="gray" />
-                                                                            ))}
-                                                                    </Stack>
-                                                                </TableCell>
-                                                                <TableCell>
                                                                     <ExpandableNotes
                                                                         content={
                                                                             account.notes ??
@@ -1394,7 +1737,42 @@ export function Accounts() {
                                                                     />
                                                                 </TableCell>
                                                                 <TableCell className="text-right">
+                                                                    {isContextMenuOpen ? (
+                                                                        <DropdownMenuTrigger asChild>
+                                                                            <span
+                                                                                aria-hidden
+                                                                                className="fixed h-0 w-0 pointer-events-none"
+                                                                                style={{
+                                                                                    left: contextMenuPositionRef
+                                                                                        .current
+                                                                                        ?.x ??
+                                                                                        0,
+                                                                                    top: contextMenuPositionRef
+                                                                                        .current
+                                                                                        ?.y ??
+                                                                                        0,
+                                                                                }}
+                                                                            />
+                                                                        </DropdownMenuTrigger>
+                                                                    ) : null}
                                                                     <div className="flex items-center justify-end gap-2">
+                                                                        <Button
+                                                                            variant="ghost"
+                                                                            size="icon"
+                                                                            onClick={() =>
+                                                                                toggleAccountDetails(
+                                                                                    account,
+                                                                                    detailKey
+                                                                                )
+                                                                            }
+                                                                            className="h-8 w-8"
+                                                                            aria-label={
+                                                                                detailsLabel
+                                                                            }
+                                                                            data-no-row-select
+                                                                        >
+                                                                            <DetailsIcon className="h-4 w-4" />
+                                                                        </Button>
                                                                         <Button
                                                                             variant="ghost"
                                                                             size="icon"
@@ -1428,7 +1806,6 @@ export function Accounts() {
                                                                     </div>
                                                                 </TableCell>
                                                             </TableRow>
-                                                        </DropdownMenuTrigger>
                                                         {isSelectable ? (
                                                             <DropdownMenuContent
                                                                 align="start"
@@ -1491,7 +1868,22 @@ export function Accounts() {
                                                             </DropdownMenuContent>
                                                         ) : null}
                                                     </DropdownMenu>
-                                                );
+                                                    {isExpanded && (
+                                                        <TableRow className="bg-muted/20">
+                                                            <TableCell
+                                                                colSpan={5}
+                                                                className="pt-0 pb-4"
+                                                            >
+                                                                <div className="rounded-md border border-muted/40 bg-muted/10 p-4">
+                                                                    {renderDetailsContent(
+                                                                        account
+                                                                    )}
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )}
+                                                </Fragment>
+                                            );
                                             })}
                                         </Fragment>
                                     ))
@@ -1522,6 +1914,7 @@ export function Accounts() {
                                   username: editingAccount.username,
                                   password: editingAccount.password,
                                   notes: editingAccount.notes ?? "",
+                                  gameData: editingAccount.gameData ?? {},
                                   groupId:
                                       editingAccount.groupId ??
                                       defaultGroupId ??
@@ -1532,6 +1925,29 @@ export function Accounts() {
                     groups={groups}
                     defaultGroupId={defaultGroupId}
                 />
+
+                <Dialog
+                    open={drawerOpen}
+                    onOpenChange={(open) => {
+                        if (!open) {
+                            setDrawerAccount(null);
+                        }
+                    }}
+                >
+                    <DialogContent className="right-0 top-0 left-auto h-full w-full max-w-[420px] translate-x-0 translate-y-0 rounded-none sm:rounded-none">
+                        <DialogHeader>
+                            <DialogTitle>Account details</DialogTitle>
+                            <DialogDescription>
+                                Game-specific fields and details.
+                            </DialogDescription>
+                        </DialogHeader>
+                        {drawerAccount ? (
+                            <div className="mt-2">
+                                {renderDetailsContent(drawerAccount)}
+                            </div>
+                        ) : null}
+                    </DialogContent>
+                </Dialog>
 
                 <Dialog open={newGroupOpen} onOpenChange={setNewGroupOpen}>
                     <DialogContent className="max-w-sm">
@@ -1566,93 +1982,300 @@ export function Accounts() {
                     </DialogContent>
                 </Dialog>
 
-                <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-                    <DialogContent className="max-w-md">
+                <Dialog
+                    open={sharingDrawerOpen}
+                    onOpenChange={(open) => {
+                        setSharingDrawerOpen(open);
+                        if (!open) {
+                            setRevokeTarget(null);
+                            clearInviteSession();
+                        }
+                    }}
+                >
+                    <DialogContent className="right-0 top-0 left-auto h-full w-full max-w-[520px] translate-x-0 translate-y-0 rounded-none sm:rounded-none">
                         <DialogHeader>
-                            <DialogTitle>Invite Link</DialogTitle>
+                            <DialogTitle>Sharing</DialogTitle>
                             <DialogDescription>
-                                Share this invite link with the person you want
-                                to give access to
+                                Manage access you have granted and send new
+                                invites.
                             </DialogDescription>
                         </DialogHeader>
-                        {inviteCode ? (
-                            <div className="w-full overflow-hidden">
-                                <TextLabel
-                                    content={
-                                        inviteCode
-                                            ? `${window.location.origin}/invite?code=${inviteCode}`
-                                            : ""
-                                    }
-                                    showCopyButton
-                                    className="break-all"
-                                />
+                        <div className="space-y-5">
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="inline-flex rounded-full bg-muted/40 p-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSharingTab("accounts")}
+                                        className={
+                                            sharingTab === "accounts"
+                                                ? "rounded-full bg-background px-3 py-1.5 text-sm font-medium text-foreground shadow"
+                                                : "rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
+                                        }
+                                    >
+                                        Accounts
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSharingTab("invites")}
+                                        className={
+                                            sharingTab === "invites"
+                                                ? "rounded-full bg-background px-3 py-1.5 text-sm font-medium text-foreground shadow"
+                                                : "rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
+                                        }
+                                    >
+                                        Invites
+                                    </button>
+                                </div>
+                                {sharingTab === "accounts" ? (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={loadSharingRelationships}
+                                        disabled={isSharingLoading}
+                                    >
+                                        Refresh
+                                    </Button>
+                                ) : null}
                             </div>
-                        ) : (
-                            <CircularProgress />
-                        )}
-                    </DialogContent>
-                </Dialog>
+                            {sharingTab === "accounts" ? (
+                                <div className="space-y-4">
+                                    <p className="text-sm text-muted-foreground">
+                                        These are the groups you have shared
+                                        with others.
+                                    </p>
+                                    {revokeTarget ? (
+                                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+                                            <div className="text-sm font-semibold">
+                                                Revoke access for{" "}
+                                                {revokeTarget.sharedWithEmail}?
+                                            </div>
+                                            <p className="mt-1 text-sm text-muted-foreground">
+                                                This stops future access. If
+                                                they already saved data locally,
+                                                it will remain on their device.
+                                            </p>
+                                            <div className="mt-3 flex justify-end gap-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        setRevokeTarget(null)
+                                                    }
+                                                >
+                                                    Cancel
+                                                </Button>
+                                                <Button
+                                                    variant="destructive"
+                                                    size="sm"
+                                                    onClick={handleRevokeShare}
+                                                    disabled={isRevokingShare}
+                                                >
+                                                    {isRevokingShare
+                                                        ? "Revoking..."
+                                                        : "Revoke access"}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ) : null}
+                                    {isSharingLoading ? (
+                                        <div className="flex items-center justify-center gap-3 py-8 text-sm text-muted-foreground">
+                                            <CircularProgress />
+                                            Loading shared access...
+                                        </div>
+                                    ) : sharingRelationships.length > 0 ? (
+                                        <div className="space-y-3">
+                                            {sharingRelationships.map(
+                                                (relationship) => {
+                                                    const createdAt = new Date(
+                                                        relationship.createdAt
+                                                    );
+                                                    const createdLabel =
+                                                        Number.isNaN(
+                                                            createdAt.getTime()
+                                                        )
+                                                            ? "Unknown"
+                                                            : createdAt.toLocaleDateString();
+                                                    const groupLabel =
+                                                        relationship.groupName ||
+                                                        groupLookup.get(
+                                                            relationship.groupId
+                                                        ) ||
+                                                        "Group";
 
-                <Dialog open={shareOpen} onOpenChange={setShareOpen}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Share Accounts</DialogTitle>
-                            <DialogDescription>
-                                You are about to share the{" "}
-                                <span className="font-semibold text-foreground">
-                                    {shareGroupName}
-                                </span>{" "}
-                                group with{" "}
-                                <span className="font-semibold text-foreground">
-                                    {inviteeEmail ?? "the connected user"}
-                                </span>
-                                . Make sure this is the right person before
-                                continuing.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-2">
-                            <Label htmlFor="share-group">Group to share</Label>
-                            <Select
-                                value={
-                                    shareGroupId ??
-                                    defaultGroupId ??
-                                    undefined
-                                }
-                                onValueChange={setShareGroupId}
-                            >
-                                <SelectTrigger className="w-full">
-                                    <SelectValue placeholder="Select a group" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {groups.map(group => (
-                                        <SelectItem
-                                            key={group.id}
-                                            value={group.id}
-                                        >
-                                            {group.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                            Connected user:{" "}
-                            {inviteeEmail ?? "Waiting for identity..."}
-                        </div>
-                        <div className="flex flex-row gap-4 justify-end">
-                            <Button
-                                variant="outline"
-                                onClick={() => setShareOpen(false)}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                variant="default"
-                                onClick={handleAccountShare}
-                                disabled={!shareGroupId && !defaultGroupId}
-                            >
-                                Yes, Share Group
-                            </Button>
+                                                    return (
+                                                        <div
+                                                            key={relationship.id}
+                                                            className="flex items-start justify-between gap-3 rounded-lg border px-4 py-3"
+                                                        >
+                                                            <div>
+                                                                <div className="text-sm font-semibold text-foreground">
+                                                                    {groupLabel}
+                                                                </div>
+                                                                <div className="text-sm text-muted-foreground">
+                                                                    Shared with{" "}
+                                                                    {
+                                                                        relationship.sharedWithEmail
+                                                                    }
+                                                                </div>
+                                                                <div className="text-xs text-muted-foreground">
+                                                                    Shared on{" "}
+                                                                    {createdLabel}
+                                                                </div>
+                                                            </div>
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() =>
+                                                                    setRevokeTarget(
+                                                                        relationship
+                                                                    )
+                                                                }
+                                                                disabled={
+                                                                    isRevokingShare
+                                                                }
+                                                            >
+                                                                Revoke
+                                                            </Button>
+                                                        </div>
+                                                    );
+                                                }
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+                                            No active shares yet. Use the
+                                            Invites tab to share a group.
+                                        </div>
+                                    )}
+                                    <p className="text-xs text-muted-foreground">
+                                        Revoking access stops future sync. If
+                                        someone saved data locally, it will
+                                        remain on their device.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="rounded-lg border p-4 space-y-3">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <div className="text-sm font-semibold">
+                                                    Invite link
+                                                </div>
+                                                <p className="text-sm text-muted-foreground">
+                                                    Send this link to connect
+                                                    securely.
+                                                </p>
+                                            </div>
+                                            {inviteCode ? (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={clearInviteSession}
+                                                >
+                                                    End invite
+                                                </Button>
+                                            ) : null}
+                                        </div>
+                                        {isConnecting ? (
+                                            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                                                <CircularProgress />
+                                                Creating invite...
+                                            </div>
+                                        ) : inviteCode ? (
+                                            <TextLabel
+                                                content={`${window.location.origin}/invite?code=${inviteCode}`}
+                                                showCopyButton
+                                                className="break-all"
+                                            />
+                                        ) : (
+                                            <Button
+                                                variant="secondary"
+                                                onClick={handleInviteClick}
+                                            >
+                                                Create invite
+                                            </Button>
+                                        )}
+                                        {inviteCode ? (
+                                            <p className="text-xs text-muted-foreground">
+                                                Keep this drawer open until
+                                                they connect.
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                    <div className="rounded-lg border p-4 space-y-3">
+                                        <div>
+                                            <div className="text-sm font-semibold">
+                                                Share access
+                                            </div>
+                                            <p className="text-sm text-muted-foreground">
+                                                Connected user:{" "}
+                                                {inviteeEmail ??
+                                                    "Waiting for identity..."}
+                                            </p>
+                                        </div>
+                                        {shareOpen ? (
+                                            <div className="space-y-3">
+                                                <div className="space-y-2">
+                                                    <Label htmlFor="share-group">
+                                                        Group to share
+                                                    </Label>
+                                                    <Select
+                                                        value={
+                                                            shareGroupId ??
+                                                            defaultGroupId ??
+                                                            undefined
+                                                        }
+                                                        onValueChange={
+                                                            setShareGroupId
+                                                        }
+                                                    >
+                                                        <SelectTrigger className="w-full">
+                                                            <SelectValue placeholder="Select a group" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {groups.map(
+                                                                (group) => (
+                                                                    <SelectItem
+                                                                        key={
+                                                                            group.id
+                                                                        }
+                                                                        value={
+                                                                            group.id
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            group.name
+                                                                        }
+                                                                    </SelectItem>
+                                                                )
+                                                            )}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="flex justify-end">
+                                                    <Button
+                                                        onClick={
+                                                            handleAccountShare
+                                                        }
+                                                        disabled={
+                                                            !shareGroupId &&
+                                                            !defaultGroupId
+                                                        }
+                                                    >
+                                                        Share group
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-muted-foreground">
+                                                {inviteCode
+                                                    ? "Waiting for the invitee to connect."
+                                                    : "Create an invite to start sharing."}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </DialogContent>
                 </Dialog>
