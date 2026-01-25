@@ -48,6 +48,7 @@ export default function AddAccountDialog({
     groups,
     defaultGroupId,
 }: AddAccountDialog) {
+    const isEditing = Boolean(defaultValues);
     const [selectedGame, setSelectedGame] = useState<GameId>("None");
     const initialGroupId = useMemo(() => {
         return (
@@ -95,9 +96,13 @@ export default function AddAccountDialog({
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                    <DialogTitle>Add account</DialogTitle>
+                    <DialogTitle>
+                        {isEditing ? "Update account" : "Add account"}
+                    </DialogTitle>
                     <DialogDescription>
-                        Add your account credentials to be securely stored.
+                        {isEditing
+                            ? "Update the account details and save your changes."
+                            : "Add your account credentials to be securely stored."}
                     </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-6">
@@ -234,7 +239,7 @@ export default function AddAccountDialog({
                             className="w-full"
                             variant="secondary"
                         >
-                            Add account
+                            {isEditing ? "Update account" : "Add account"}
                         </Button>
                     </DialogFooter>
                 </form>

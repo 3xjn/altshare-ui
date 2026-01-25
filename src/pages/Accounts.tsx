@@ -17,9 +17,9 @@ import {
     Settings,
     Lock,
     Share,
-    Eye,
     ChevronDown,
     ChevronUp,
+    Users,
 } from "lucide-react";
 import {
     Dialog,
@@ -94,10 +94,8 @@ export function Accounts() {
     const [inviteCode, setInviteCode] = useState<string | null>(null);
     const [peer, setPeer] = useState<PeerService | null>(null);
     const [shareOpen, setShareOpen] = useState(false);
-    const [sharingDrawerOpen, setSharingDrawerOpen] = useState(false);
-    const [sharingTab, setSharingTab] = useState<"accounts" | "invites">(
-        "accounts"
-    );
+    const [inviteModalOpen, setInviteModalOpen] = useState(false);
+    const [sharingModalOpen, setSharingModalOpen] = useState(false);
     const [sharingRelationships, setSharingRelationships] = useState<
         SharingRelationship[]
     >([]);
@@ -113,13 +111,9 @@ export function Accounts() {
     const [selectedAccountIds, setSelectedAccountIds] = useState<Set<string>>(
         new Set()
     );
-    const [detailsMode, setDetailsMode] = useState<"accordion" | "drawer">(
-        "accordion"
-    );
     const [expandedAccountKeys, setExpandedAccountKeys] = useState<
         Set<string>
     >(new Set());
-    const [drawerAccount, setDrawerAccount] = useState<Account | null>(null);
     const [contextMenuAccountId, setContextMenuAccountId] = useState<
         string | null
     >(null);
@@ -134,6 +128,7 @@ export function Accounts() {
     const contextMenuPositionRef = useRef<{ x: number; y: number } | null>(
         null
     );
+    const inviteSessionRef = useRef(0);
 
     useEffect(() => {
         const initializeAccounts = async () => {
@@ -182,9 +177,9 @@ export function Accounts() {
     }, [shareOpen, activeGroupId, defaultGroupId]);
 
     useEffect(() => {
-        if (!sharingDrawerOpen || sharingTab !== "accounts") return;
+        if (!sharingModalOpen) return;
         loadSharingRelationships();
-    }, [sharingDrawerOpen, sharingTab]);
+    }, [sharingModalOpen]);
 
     useEffect(() => {
         const validIds = new Set(
@@ -211,10 +206,7 @@ export function Accounts() {
         );
     }, [decryptedAccounts]);
 
-    useEffect(() => {
-        setExpandedAccountKeys(new Set());
-        setDrawerAccount(null);
-    }, [detailsMode]);
+
 
     const handleRefresh = async () => {
         if (!currentPassword) {
@@ -594,24 +586,16 @@ export function Accounts() {
         setContextMenuAccountId(account.id);
     };
 
-    const toggleAccountDetails = (
-        account: Account,
-        detailKey: string
-    ) => {
-        if (detailsMode === "accordion") {
-            setExpandedAccountKeys((prev) => {
-                const next = new Set(prev);
-                if (next.has(detailKey)) {
-                    next.delete(detailKey);
-                } else {
-                    next.add(detailKey);
-                }
-                return next;
-            });
-            return;
-        }
-
-        setDrawerAccount(account);
+    const toggleAccountDetails = (detailKey: string) => {
+        setExpandedAccountKeys((prev) => {
+            const next = new Set(prev);
+            if (next.has(detailKey)) {
+                next.delete(detailKey);
+            } else {
+                next.add(detailKey);
+            }
+            return next;
+        });
     };
 
     const handleDelete = async (account: Account) => {
@@ -641,19 +625,29 @@ export function Accounts() {
         }
     };
 
-    const openSharingDrawer = (tab: "accounts" | "invites") => {
-        setSharingTab(tab);
-        setSharingDrawerOpen(true);
+    const openSharingModal = () => {
+        setSharingModalOpen(true);
     };
 
-    const clearInviteSession = () => {
-        signalRService?.disconnect();
-        setSignalRService(null);
-        setPeer(null);
-        setIsConnecting(false);
-        setInviteCode(null);
-        setInviteeEmail(null);
-        setShareOpen(false);
+    const invalidateInviteSession = () => {
+        inviteSessionRef.current += 1;
+        return inviteSessionRef.current;
+    };
+
+    const clearInviteSession = async () => {
+        invalidateInviteSession();
+        try {
+            await signalRService?.disconnect();
+        } catch (error) {
+            console.warn("Failed to disconnect invite session:", error);
+        } finally {
+            setSignalRService(null);
+            setPeer(null);
+            setIsConnecting(false);
+            setInviteCode(null);
+            setInviteeEmail(null);
+            setShareOpen(false);
+        }
     };
 
     const loadSharingRelationships = async () => {
@@ -702,14 +696,16 @@ export function Accounts() {
         }
     };
 
-    const handleInviteClick = async () => {
+    const startInviteSession = async () => {
         if (isConnecting) return;
-        openSharingDrawer("invites");
-        clearInviteSession();
+        await clearInviteSession();
+        const sessionId = inviteSessionRef.current;
+        const isStale = () => inviteSessionRef.current !== sessionId;
 
         if (isTestMode) {
             setIsConnecting(true);
             setTimeout(() => {
+                if (isStale()) return;
                 setIsConnecting(false);
                 setInviteCode("test-invite-code-12345");
                 setInviteeEmail("test-user@example.com");
@@ -722,16 +718,19 @@ export function Accounts() {
             let newPeer: PeerService | null = null;
             const service = new SignalRService({
                 roomCreated: (roomId) => {
+                    if (isStale()) return;
                     setInviteCode(roomId);
                     setIsConnecting(false);
                     service.roomId = roomId;
                 },
                 userJoined: () => {
+                    if (isStale()) return;
                     if (newPeer) {
                         newPeer.initiate(true, service.roomId);
                     }
                 },
                 receiveSignal: (signal) => {
+                    if (isStale()) return;
                     if (newPeer) {
                         newPeer.signal(signal);
                     }
@@ -740,11 +739,13 @@ export function Accounts() {
 
             newPeer = new PeerService(service);
             newPeer.registerHandler("userInfo", (payload) => {
+                if (isStale()) return;
                 setInviteeEmail(payload.email);
             });
 
             newPeer.registerHandler("verification", async (payload) => {
                 try {
+                    if (isStale()) return;
                     const { groupKey } = await resolveGroupKey(
                         payload.encryptedKey.groupId
                     );
@@ -783,6 +784,7 @@ export function Accounts() {
                         tag: payload.encryptedKey.tag,
                     });
 
+                    if (isStale()) return;
                     await loadSharingRelationships();
                     newPeer?.sendMessage("sharingConfirmation", {
                         success: true,
@@ -791,8 +793,10 @@ export function Accounts() {
                         title: "Success",
                         description: "Account sharing verified successfully.",
                     });
-                    clearInviteSession();
+                    await clearInviteSession();
+                    setInviteModalOpen(false);
                 } catch (error) {
+                    if (isStale()) return;
                     console.error("Share verification failed:", error);
                     toast({
                         variant: "destructive",
@@ -803,16 +807,38 @@ export function Accounts() {
             });
 
             newPeer.onConnect = () => {
+                if (isStale()) return;
                 setShareOpen(true);
-                setSharingDrawerOpen(true);
-                setSharingTab("invites");
             };
 
             await service.connect();
+            if (isStale()) {
+                try {
+                    await service.disconnect();
+                } catch (error) {
+                    console.warn(
+                        "Failed to disconnect stale invite session:",
+                        error
+                    );
+                }
+                return;
+            }
             service.createRoom();
+            if (isStale()) {
+                try {
+                    await service.disconnect();
+                } catch (error) {
+                    console.warn(
+                        "Failed to disconnect stale invite session:",
+                        error
+                    );
+                }
+                return;
+            }
             setSignalRService(service);
             setPeer(newPeer);
         } catch (error) {
+            if (isStale()) return;
             console.error("Failed to establish connection:", error);
             toast({
                 variant: "destructive",
@@ -821,6 +847,17 @@ export function Accounts() {
                     "Failed to establish connection. Please try again.",
             });
             setIsConnecting(false);
+        }
+    };
+
+    const handleInviteClick = async () => {
+        if (sharingModalOpen) {
+            setSharingModalOpen(false);
+            setRevokeTarget(null);
+        }
+        setInviteModalOpen(true);
+        if (!inviteCode && !isConnecting) {
+            await startInviteSession();
         }
     };
 
@@ -1317,8 +1354,6 @@ export function Accounts() {
         );
     };
 
-    const drawerOpen = detailsMode === "drawer" && !!drawerAccount;
-
     if (!isAuthenticated && !isTestMode) {
         return <Navigate to="/login" replace />;
     }
@@ -1378,6 +1413,32 @@ export function Accounts() {
                             )}
                         </Button>
                         <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="icon">
+                                    <Users className="h-4 w-4" />
+                                    <span className="sr-only">
+                                        Open sharing manager
+                                    </span>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Sharing</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    onSelect={openSharingModal}
+                                    className="cursor-pointer"
+                                >
+                                    Accounts
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    onSelect={() => void handleInviteClick()}
+                                    className="cursor-pointer"
+                                >
+                                    Invites
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                        <DropdownMenu>
                             <DropdownMenuTrigger>
                                 <Settings size={24} strokeWidth={1.5} />
                             </DropdownMenuTrigger>
@@ -1385,15 +1446,6 @@ export function Accounts() {
                                 <DropdownMenuLabel>
                                     My Account
                                 </DropdownMenuLabel>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                    onClick={() =>
-                                        openSharingDrawer("accounts")
-                                    }
-                                    className="cursor-pointer"
-                                >
-                                    Manage sharing
-                                </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                     onClick={handleExportData}
@@ -1443,26 +1495,6 @@ export function Accounts() {
                             >
                                 New group
                             </Button>
-                            <Select
-                                value={detailsMode}
-                                onValueChange={(value) =>
-                                    setDetailsMode(
-                                        value as "accordion" | "drawer"
-                                    )
-                                }
-                            >
-                                <SelectTrigger className="w-[170px]">
-                                    <SelectValue placeholder="Details view" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="accordion">
-                                        Inline details
-                                    </SelectItem>
-                                    <SelectItem value="drawer">
-                                        Side panel
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
                         </div>
                         {selectedCount > 0 && (
                             <DropdownMenu>
@@ -1614,7 +1646,6 @@ export function Accounts() {
                                                     ? account.id
                                                     : rowKey;
                                                 const isExpanded =
-                                                    detailsMode === "accordion" &&
                                                     expandedAccountKeys.has(
                                                         detailKey
                                                     );
@@ -1622,18 +1653,12 @@ export function Accounts() {
                                                     isSelectable &&
                                                     account.id ===
                                                         contextMenuAccountId;
-                                                const DetailsIcon =
-                                                    detailsMode === "accordion"
-                                                        ? isExpanded
-                                                            ? ChevronUp
-                                                            : ChevronDown
-                                                        : Eye;
-                                                const detailsLabel =
-                                                    detailsMode === "accordion"
-                                                        ? isExpanded
-                                                            ? "Collapse details"
-                                                            : "Expand details"
-                                                        : "View details";
+                                                const DetailsIcon = isExpanded
+                                                    ? ChevronUp
+                                                    : ChevronDown;
+                                                const detailsLabel = isExpanded
+                                                    ? "Collapse details"
+                                                    : "Expand details";
                                                 const rowClassName = [
                                                     "group hover:bg-accent/5",
                                                     "select-none",
@@ -1761,7 +1786,6 @@ export function Accounts() {
                                                                             size="icon"
                                                                             onClick={() =>
                                                                                 toggleAccountDetails(
-                                                                                    account,
                                                                                     detailKey
                                                                                 )
                                                                             }
@@ -1926,29 +1950,6 @@ export function Accounts() {
                     defaultGroupId={defaultGroupId}
                 />
 
-                <Dialog
-                    open={drawerOpen}
-                    onOpenChange={(open) => {
-                        if (!open) {
-                            setDrawerAccount(null);
-                        }
-                    }}
-                >
-                    <DialogContent className="right-0 top-0 left-auto h-full w-full max-w-[420px] translate-x-0 translate-y-0 rounded-none sm:rounded-none">
-                        <DialogHeader>
-                            <DialogTitle>Account details</DialogTitle>
-                            <DialogDescription>
-                                Game-specific fields and details.
-                            </DialogDescription>
-                        </DialogHeader>
-                        {drawerAccount ? (
-                            <div className="mt-2">
-                                {renderDetailsContent(drawerAccount)}
-                            </div>
-                        ) : null}
-                    </DialogContent>
-                </Dialog>
-
                 <Dialog open={newGroupOpen} onOpenChange={setNewGroupOpen}>
                     <DialogContent className="max-w-sm">
                         <DialogHeader>
@@ -1983,299 +1984,296 @@ export function Accounts() {
                 </Dialog>
 
                 <Dialog
-                    open={sharingDrawerOpen}
+                    open={inviteModalOpen}
                     onOpenChange={(open) => {
-                        setSharingDrawerOpen(open);
+                        setInviteModalOpen(open);
                         if (!open) {
-                            setRevokeTarget(null);
-                            clearInviteSession();
+                            void clearInviteSession();
                         }
                     }}
                 >
-                    <DialogContent className="right-0 top-0 left-auto h-full w-full max-w-[520px] translate-x-0 translate-y-0 rounded-none sm:rounded-none">
+                    <DialogContent className="max-w-xl">
                         <DialogHeader>
-                            <DialogTitle>Sharing</DialogTitle>
+                            <DialogTitle>
+                                {shareOpen ? "Share access" : "Invite access"}
+                            </DialogTitle>
                             <DialogDescription>
-                                Manage access you have granted and send new
-                                invites.
+                                {shareOpen
+                                    ? "Choose a group to share with the connected user."
+                                    : "Share a secure link to grant access to a group."}
                             </DialogDescription>
                         </DialogHeader>
-                        <div className="space-y-5">
-                            <div className="flex items-center justify-between gap-3">
-                                <div className="inline-flex rounded-full bg-muted/40 p-1">
-                                    <button
-                                        type="button"
-                                        onClick={() => setSharingTab("accounts")}
-                                        className={
-                                            sharingTab === "accounts"
-                                                ? "rounded-full bg-background px-3 py-1.5 text-sm font-medium text-foreground shadow"
-                                                : "rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
-                                        }
-                                    >
-                                        Accounts
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setSharingTab("invites")}
-                                        className={
-                                            sharingTab === "invites"
-                                                ? "rounded-full bg-background px-3 py-1.5 text-sm font-medium text-foreground shadow"
-                                                : "rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
-                                        }
-                                    >
-                                        Invites
-                                    </button>
-                                </div>
-                                {sharingTab === "accounts" ? (
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={loadSharingRelationships}
-                                        disabled={isSharingLoading}
-                                    >
-                                        Refresh
-                                    </Button>
-                                ) : null}
-                            </div>
-                            {sharingTab === "accounts" ? (
-                                <div className="space-y-4">
-                                    <p className="text-sm text-muted-foreground">
-                                        These are the groups you have shared
-                                        with others.
-                                    </p>
-                                    {revokeTarget ? (
-                                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-                                            <div className="text-sm font-semibold">
-                                                Revoke access for{" "}
-                                                {revokeTarget.sharedWithEmail}?
-                                            </div>
-                                            <p className="mt-1 text-sm text-muted-foreground">
-                                                This stops future access. If
-                                                they already saved data locally,
-                                                it will remain on their device.
-                                            </p>
-                                            <div className="mt-3 flex justify-end gap-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        setRevokeTarget(null)
-                                                    }
-                                                >
-                                                    Cancel
-                                                </Button>
-                                                <Button
-                                                    variant="destructive"
-                                                    size="sm"
-                                                    onClick={handleRevokeShare}
-                                                    disabled={isRevokingShare}
-                                                >
-                                                    {isRevokingShare
-                                                        ? "Revoking..."
-                                                        : "Revoke access"}
-                                                </Button>
-                                            </div>
+                        <div className="space-y-4">
+                            {shareOpen ? (
+                                <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+                                    <div>
+                                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                            Connected user
                                         </div>
-                                    ) : null}
-                                    {isSharingLoading ? (
-                                        <div className="flex items-center justify-center gap-3 py-8 text-sm text-muted-foreground">
-                                            <CircularProgress />
-                                            Loading shared access...
+                                        <div className="text-sm font-semibold text-foreground">
+                                            {inviteeEmail ??
+                                                "Connected user"}
                                         </div>
-                                    ) : sharingRelationships.length > 0 ? (
-                                        <div className="space-y-3">
-                                            {sharingRelationships.map(
-                                                (relationship) => {
-                                                    const createdAt = new Date(
-                                                        relationship.createdAt
-                                                    );
-                                                    const createdLabel =
-                                                        Number.isNaN(
-                                                            createdAt.getTime()
-                                                        )
-                                                            ? "Unknown"
-                                                            : createdAt.toLocaleDateString();
-                                                    const groupLabel =
-                                                        relationship.groupName ||
-                                                        groupLookup.get(
-                                                            relationship.groupId
-                                                        ) ||
-                                                        "Group";
-
-                                                    return (
-                                                        <div
-                                                            key={relationship.id}
-                                                            className="flex items-start justify-between gap-3 rounded-lg border px-4 py-3"
-                                                        >
-                                                            <div>
-                                                                <div className="text-sm font-semibold text-foreground">
-                                                                    {groupLabel}
-                                                                </div>
-                                                                <div className="text-sm text-muted-foreground">
-                                                                    Shared with{" "}
-                                                                    {
-                                                                        relationship.sharedWithEmail
-                                                                    }
-                                                                </div>
-                                                                <div className="text-xs text-muted-foreground">
-                                                                    Shared on{" "}
-                                                                    {createdLabel}
-                                                                </div>
-                                                            </div>
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                onClick={() =>
-                                                                    setRevokeTarget(
-                                                                        relationship
-                                                                    )
-                                                                }
-                                                                disabled={
-                                                                    isRevokingShare
-                                                                }
-                                                            >
-                                                                Revoke
-                                                            </Button>
-                                                        </div>
-                                                    );
-                                                }
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-                                            No active shares yet. Use the
-                                            Invites tab to share a group.
-                                        </div>
-                                    )}
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="share-group-modal">
+                                            Group to share
+                                        </Label>
+                                        <Select
+                                            value={
+                                                shareGroupId ??
+                                                defaultGroupId ??
+                                                undefined
+                                            }
+                                            onValueChange={setShareGroupId}
+                                        >
+                                            <SelectTrigger className="w-full">
+                                                <SelectValue placeholder="Select a group" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {groups.map((group) => (
+                                                    <SelectItem
+                                                        key={group.id}
+                                                        value={group.id}
+                                                    >
+                                                        {group.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="flex justify-end">
+                                        <Button
+                                            onClick={handleAccountShare}
+                                            disabled={
+                                                !shareGroupId &&
+                                                !defaultGroupId
+                                            }
+                                        >
+                                            Share group
+                                        </Button>
+                                    </div>
                                     <p className="text-xs text-muted-foreground">
-                                        Revoking access stops future sync. If
-                                        someone saved data locally, it will
-                                        remain on their device.
+                                        You can revoke access later from the
+                                        sharing manager.
                                     </p>
                                 </div>
                             ) : (
-                                <div className="space-y-4">
-                                    <div className="rounded-lg border p-4 space-y-3">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div>
-                                                <div className="text-sm font-semibold">
-                                                    Invite link
-                                                </div>
-                                                <p className="text-sm text-muted-foreground">
-                                                    Send this link to connect
-                                                    securely.
-                                                </p>
+                                <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                            <div className="text-sm font-semibold">
+                                                Invite link
                                             </div>
-                                            {inviteCode ? (
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={clearInviteSession}
-                                                >
-                                                    End invite
-                                                </Button>
-                                            ) : null}
+                                            <p className="text-sm text-muted-foreground">
+                                                Send this link to connect
+                                                securely.
+                                            </p>
                                         </div>
+                                        {(inviteCode || isConnecting) ? (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() =>
+                                                    void clearInviteSession()
+                                                }
+                                            >
+                                                End invite
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                    <div className="min-h-[44px] flex items-center">
                                         {isConnecting ? (
                                             <div className="flex items-center gap-3 text-sm text-muted-foreground">
                                                 <CircularProgress />
                                                 Creating invite...
                                             </div>
                                         ) : inviteCode ? (
-                                            <TextLabel
-                                                content={`${window.location.origin}/invite?code=${inviteCode}`}
-                                                showCopyButton
-                                                className="break-all"
-                                            />
+                                            <div className="w-full min-w-0">
+                                                <TextLabel
+                                                    content={`${window.location.origin}/invite?code=${inviteCode}`}
+                                                    showCopyButton
+                                                    className="max-w-full"
+                                                />
+                                            </div>
                                         ) : (
                                             <Button
                                                 variant="secondary"
-                                                onClick={handleInviteClick}
+                                                onClick={() =>
+                                                    void startInviteSession()
+                                                }
                                             >
                                                 Create invite
                                             </Button>
                                         )}
-                                        {inviteCode ? (
-                                            <p className="text-xs text-muted-foreground">
-                                                Keep this drawer open until
-                                                they connect.
-                                            </p>
-                                        ) : null}
                                     </div>
-                                    <div className="rounded-lg border p-4 space-y-3">
-                                        <div>
-                                            <div className="text-sm font-semibold">
-                                                Share access
-                                            </div>
-                                            <p className="text-sm text-muted-foreground">
-                                                Connected user:{" "}
-                                                {inviteeEmail ??
-                                                    "Waiting for identity..."}
-                                            </p>
-                                        </div>
-                                        {shareOpen ? (
-                                            <div className="space-y-3">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="share-group">
-                                                        Group to share
-                                                    </Label>
-                                                    <Select
-                                                        value={
-                                                            shareGroupId ??
-                                                            defaultGroupId ??
-                                                            undefined
-                                                        }
-                                                        onValueChange={
-                                                            setShareGroupId
-                                                        }
-                                                    >
-                                                        <SelectTrigger className="w-full">
-                                                            <SelectValue placeholder="Select a group" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {groups.map(
-                                                                (group) => (
-                                                                    <SelectItem
-                                                                        key={
-                                                                            group.id
-                                                                        }
-                                                                        value={
-                                                                            group.id
-                                                                        }
-                                                                    >
-                                                                        {
-                                                                            group.name
-                                                                        }
-                                                                    </SelectItem>
-                                                                )
-                                                            )}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                                <div className="flex justify-end">
-                                                    <Button
-                                                        onClick={
-                                                            handleAccountShare
-                                                        }
-                                                        disabled={
-                                                            !shareGroupId &&
-                                                            !defaultGroupId
-                                                        }
-                                                    >
-                                                        Share group
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <p className="text-sm text-muted-foreground">
-                                                {inviteCode
-                                                    ? "Waiting for the invitee to connect."
-                                                    : "Create an invite to start sharing."}
-                                            </p>
-                                        )}
-                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        {inviteCode
+                                            ? "Keep this window open until they connect."
+                                            : "Create an invite to start sharing."}
+                                    </p>
                                 </div>
                             )}
+                            <div className="flex justify-end">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setInviteModalOpen(false);
+                                        void clearInviteSession();
+                                    }}
+                                >
+                                    Close
+                                </Button>
+                            </div>
+                        </div>
+                    </DialogContent>
+                </Dialog>
+
+                <Dialog
+                    open={sharingModalOpen}
+                    onOpenChange={(open) => {
+                        setSharingModalOpen(open);
+                        if (!open) {
+                            setRevokeTarget(null);
+                        }
+                    }}
+                >
+                    <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                            <DialogTitle>Sharing</DialogTitle>
+                            <DialogDescription>
+                                Manage access you have granted to your groups.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <div className="text-sm font-semibold">
+                                        Active shares
+                                    </div>
+                                    <p className="text-sm text-muted-foreground">
+                                        These are the groups you have shared
+                                        with others.
+                                    </p>
+                                </div>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={loadSharingRelationships}
+                                    disabled={isSharingLoading}
+                                >
+                                    Refresh
+                                </Button>
+                            </div>
+                            {revokeTarget ? (
+                                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+                                    <div className="text-sm font-semibold">
+                                        Revoke access for{" "}
+                                        {revokeTarget.sharedWithEmail}?
+                                    </div>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        This stops future access. If they
+                                        already saved data locally, it will
+                                        remain on their device.
+                                    </p>
+                                    <div className="mt-3 flex justify-end gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                setRevokeTarget(null)
+                                            }
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            variant="destructive"
+                                            size="sm"
+                                            onClick={handleRevokeShare}
+                                            disabled={isRevokingShare}
+                                        >
+                                            {isRevokingShare
+                                                ? "Revoking..."
+                                                : "Revoke access"}
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : null}
+                            {isSharingLoading ? (
+                                <div className="flex items-center justify-center gap-3 py-8 text-sm text-muted-foreground">
+                                    <CircularProgress />
+                                    Loading shared access...
+                                </div>
+                            ) : sharingRelationships.length > 0 ? (
+                                <div className="space-y-3">
+                                    {sharingRelationships.map(
+                                        (relationship) => {
+                                            const createdAt = new Date(
+                                                relationship.createdAt
+                                            );
+                                            const createdLabel =
+                                                Number.isNaN(
+                                                    createdAt.getTime()
+                                                )
+                                                    ? "Unknown"
+                                                    : createdAt.toLocaleDateString();
+                                            const groupLabel =
+                                                relationship.groupName ||
+                                                groupLookup.get(
+                                                    relationship.groupId
+                                                ) ||
+                                                "Group";
+
+                                            return (
+                                                <div
+                                                    key={relationship.id}
+                                                    className="flex items-start justify-between gap-3 rounded-lg border px-4 py-3"
+                                                >
+                                                    <div>
+                                                        <div className="text-sm font-semibold text-foreground">
+                                                            {groupLabel}
+                                                        </div>
+                                                        <div className="text-sm text-muted-foreground">
+                                                            Shared with{" "}
+                                                            {
+                                                                relationship.sharedWithEmail
+                                                            }
+                                                        </div>
+                                                        <div className="text-xs text-muted-foreground">
+                                                            Shared on{" "}
+                                                            {createdLabel}
+                                                        </div>
+                                                    </div>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() =>
+                                                            setRevokeTarget(
+                                                                relationship
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            isRevokingShare
+                                                        }
+                                                    >
+                                                        Revoke
+                                                    </Button>
+                                                </div>
+                                            );
+                                        }
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+                                    No active shares yet. Use Invite to share a
+                                    group.
+                                </div>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                                Revoking access stops future sync. If someone
+                                saved data locally, it will remain on their
+                                device.
+                            </p>
                         </div>
                     </DialogContent>
                 </Dialog>
