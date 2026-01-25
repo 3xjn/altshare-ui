@@ -52,7 +52,11 @@ export function ExpandableNotes({ content, showCopyButton = false }: ExpandableN
             </button>
 
             <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                <DialogContent className="sm:max-w-[600px]">
+                <DialogContent
+                    className="sm:max-w-[600px]"
+                    data-no-row-select="true"
+                    onMouseDown={(event) => event.stopPropagation()}
+                >
                     <DialogHeader>
                         <DialogTitle>Notes</DialogTitle>
                     </DialogHeader>
