@@ -36,6 +36,7 @@ export function TextLabel({
     label,
     className,
 }: TextLabelProps) {
+    const hiddenPlaceholder = "\u2022".repeat(10);
     // State to manage visibility when eye button is shown
     const [isVisible, setIsVisible] = useState(false);
     // State to manage copy status feedback
@@ -67,10 +68,10 @@ export function TextLabel({
 
     /**
      * If the eye button is enabled and the content is hidden, replace the text
-     * with bullet characters. Otherwise, display the plain text.
+     * with a fixed-length placeholder. Otherwise, display the plain text.
      */
     const displayContent =
-        showEyeButton && !isVisible ? "•".repeat(content.length) : content;
+        showEyeButton && !isVisible ? hiddenPlaceholder : content;
 
     return (
         <div className={cn("space-y-2 max-w-300 w-full", className)}>
