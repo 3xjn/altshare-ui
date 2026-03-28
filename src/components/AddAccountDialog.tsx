@@ -18,7 +18,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Dispatch, SetStateAction, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Stack } from "./ui/stack";
 import type { AccountGroup } from "@/stores/AccountStore";
 import { GAME_CATALOG, GameId, getGameConfig } from "@/config/games";
@@ -33,7 +33,7 @@ interface DefaultValues {
 }
 interface AddAccountDialog {
     open: boolean;
-    setOpen: Dispatch<SetStateAction<boolean>>;
+    setOpen: (open: boolean) => void;
     handleSubmit: React.FormEventHandler<HTMLFormElement> | undefined;
     defaultValues?: DefaultValues;
     groups: AccountGroup[];
