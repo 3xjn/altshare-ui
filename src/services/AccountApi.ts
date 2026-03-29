@@ -85,7 +85,8 @@ export class AccountApi extends ApiService {
     }
 
     async getRank(username: string): Promise<RankResponse> {
-        const response = await this.api.get(`${this.route}/rank?username=${username}`, {
+        const response = await this.api.get(`${this.route}/rank`, {
+            params: { username },
             validateStatus: function (status) {
                 return status <= 500;
             }

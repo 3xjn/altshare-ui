@@ -137,7 +137,7 @@ interface AccountContextType {
     loadSharedAccounts: () => Promise<void>;
     getRanks: () => Promise<void>;
 
-    updateAccount: (username: string, account: Partial<Account>) => void;
+    updateAccount: (id: string, account: Partial<Account>) => void;
 
     logout: () => void;
 }
@@ -503,40 +503,70 @@ export const useAccountStore = create<AccountContextType>((set, get) => {
     },
     getRanks: async () => {
         const updateAccount = useAccountStore.getState().updateAccount;
+        const marvelAccounts = useAccountStore
+            .getState()
+            .decryptedAccounts.filter(
+                (account) =>
+                    account.game === "Marvel Rivals" &&
+                    account.id &&
+                    account.username
+            );
 
-        await Promise.all(useAccountStore.getState().decryptedAccounts.map(async account => {
-            if (account.game == "Marvel Rivals") {
-                updateAccount(account.username, { isLoadingRank: true })
+        const accountsByUsername = new Map<string, Account[]>();
+        for (const account of marvelAccounts) {
+            const existing = accountsByUsername.get(account.username) ?? [];
+            existing.push(account);
+            accountsByUsername.set(account.username, existing);
+        }
 
-                const cache = await rankStore.get<RankCache>(account.username)
+        await Promise.all(
+            Array.from(accountsByUsername.entries()).map(async ([username, accounts]) => {
+                for (const account of accounts) {
+                    updateAccount(account.id, { isLoadingRank: true });
+                }
+
+                const cache = await rankStore.get<RankCache>(username);
                 if (cache) {
-                    console.log("hit cache for", account.username, cache.rank)
-                    updateAccount(account.username, { rank: cache.rank, isLoadingRank: false })
-                    return;
-                };
-
-                const response = await accountApi.getRank(account.username);
-                console.log("response", response)
-                
-                try {
-                    if (response) {
-                        if (response.rank == "Invalid level") throw new Error("Invalid level");
-
-                        rankStore.set<RankCache>(account.username, {
-                            rank: response.rank
+                    console.log("hit cache for", username, cache.rank);
+                    for (const account of accounts) {
+                        updateAccount(account.id, {
+                            rank: cache.rank,
+                            isLoadingRank: false
                         });
-                        updateAccount(account.username, { rank: response.rank, isLoadingRank: false });
+                    }
+                    return;
+                }
+
+                try {
+                    const response = await accountApi.getRank(username);
+                    console.log("response", response);
+
+                    if (!response?.rank || response.rank === "Invalid level") {
+                        throw new Error("Invalid level");
+                    }
+
+                    await rankStore.set<RankCache>(username, {
+                        rank: response.rank
+                    });
+
+                    for (const account of accounts) {
+                        updateAccount(account.id, {
+                            rank: response.rank,
+                            isLoadingRank: false
+                        });
                     }
                 } catch {
-                    updateAccount(account.username, { isLoadingRank: false })
+                    for (const account of accounts) {
+                        updateAccount(account.id, { isLoadingRank: false });
+                    }
                 }
-            }
-        }));
+            })
+        );
     },
 
-    updateAccount: (username, partial) => set((state) => ({
+    updateAccount: (id, partial) => set((state) => ({
         decryptedAccounts: state.decryptedAccounts.map(acc => {
-            if (acc.username == username) {
+            if (acc.id == id) {
                 return {...acc, ...partial }
             }
 

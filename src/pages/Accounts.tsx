@@ -83,7 +83,7 @@ export function Accounts() {
                     await loadGroups();
                     await loadAccounts();
                     await loadSharedAccounts();
-                    getRanks();
+                    await getRanks();
                 }
             } catch (error) {
                 console.error("Failed to load accounts:", error);
@@ -300,7 +300,7 @@ export function Accounts() {
         });
 
         await loadAccounts();
-        getRanks();
+        await getRanks();
 
         toast({
             title: "Success",
@@ -336,7 +336,7 @@ export function Accounts() {
         });
 
         await loadAccounts();
-        getRanks();
+        await getRanks();
 
         toast({
             title: "Success",
