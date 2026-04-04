@@ -1,9 +1,7 @@
 import { TextLabel } from "@/components/ui/text-label";
-import { CircularProgress } from "@/components/ui/progress";
-import { getImageFromRank } from "@/utils/getImageFromRank";
 import { getGameConfig } from "@/config/games";
-import { Lock } from "lucide-react";
 import type { Account } from "@/stores/AccountStore";
+import { AccountRank } from "@/components/accounts/AccountRank";
 
 type AccountDetailsProps = {
     account: Account;
@@ -20,25 +18,7 @@ export function AccountDetails({ account }: AccountDetailsProps) {
         return (
             <div className="space-y-2">
                 <div className="text-sm font-medium text-foreground">Rank</div>
-                <div className="flex items-center gap-2">
-                    {account.isLoadingRank ? (
-                        <CircularProgress />
-                    ) : (
-                        account.rank && (
-                            <img
-                                className="w-[30px] h-[30px] object-cover rounded-md"
-                                src={getImageFromRank(account.rank)}
-                                alt={account.rank}
-                            />
-                        )
-                    )}
-                    {!account.isLoadingRank &&
-                        (account.rank ? (
-                            <span>{account.rank}</span>
-                        ) : (
-                            <Lock color="gray" />
-                        ))}
-                </div>
+                <AccountRank account={account} />
             </div>
         );
     };

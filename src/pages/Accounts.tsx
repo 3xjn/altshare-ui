@@ -83,7 +83,7 @@ export function Accounts() {
                     await loadGroups();
                     await loadAccounts();
                     await loadSharedAccounts();
-                    await getRanks();
+                    void getRanks();
                 }
             } catch (error) {
                 console.error("Failed to load accounts:", error);
@@ -144,7 +144,7 @@ export function Accounts() {
             await loadGroups();
             await loadAccounts();
             await loadSharedAccounts();
-            await getRanks();
+            void getRanks();
 
             toast({
                 title: "Success",
@@ -300,7 +300,7 @@ export function Accounts() {
         });
 
         await loadAccounts();
-        await getRanks();
+        void getRanks();
 
         toast({
             title: "Success",
@@ -336,7 +336,7 @@ export function Accounts() {
         });
 
         await loadAccounts();
-        await getRanks();
+        void getRanks();
 
         toast({
             title: "Success",
@@ -435,6 +435,7 @@ export function Accounts() {
         try {
             await accountApi.deleteAccount(account.id);
             await loadAccounts();
+            void getRanks();
             toast({
                 title: "Success",
                 description: "Account deleted successfully.",

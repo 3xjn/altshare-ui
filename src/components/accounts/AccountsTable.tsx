@@ -20,6 +20,7 @@ import type { AccountSection } from "@/components/accounts/types";
 import { SelectionMenuContent } from "@/components/accounts/SelectionMenuContent";
 import { AccountDetails } from "@/components/accounts/AccountDetails";
 import { GameBadge } from "@/components/accounts/GameBadge";
+import { AccountRank } from "@/components/accounts/AccountRank";
 
 type AccountsTableProps = {
     isLoading: boolean;
@@ -60,7 +61,6 @@ export function AccountsTable({
     onRowClick,
     onRowContextMenu,
     onContextMenuOpenChange,
-    onToggleDetails,
     onEdit,
     onDelete,
     onBulkMove,
@@ -74,6 +74,7 @@ export function AccountsTable({
                     <TableRow>
                         <TableHead className="w-[140px]">Game</TableHead>
                         <TableHead className="w-[200px]">Username</TableHead>
+                        {/*<TableHead className="w-[220px]">Rank</TableHead>*/}
                         <TableHead className="w-[200px]">Password</TableHead>
                         <TableHead>Notes</TableHead>
                         <TableHead className="w-[130px] text-right">
@@ -84,7 +85,7 @@ export function AccountsTable({
                 <TableBody>
                     {isLoading ? (
                         <TableRow>
-                            <TableCell colSpan={5} className="h-32">
+                            <TableCell colSpan={6} className="h-32">
                                 <div className="flex items-center justify-center gap-3">
                                     <svg
                                         className="animate-spin h-5 w-5 text-muted-foreground"
@@ -114,7 +115,7 @@ export function AccountsTable({
                         </TableRow>
                     ) : totalAccounts === 0 ? (
                         <TableRow>
-                            <TableCell colSpan={5} className="h-32">
+                            <TableCell colSpan={6} className="h-32">
                                 <div className="flex flex-col items-center justify-center text-center">
                                     <h3 className="font-medium">
                                         No accounts yet
@@ -130,7 +131,7 @@ export function AccountsTable({
                             <Fragment key={`section-${section.id}`}>
                                 <TableRow className="bg-muted/30">
                                     <TableCell
-                                        colSpan={5}
+                                        colSpan={6}
                                         className="text-sm font-semibold text-foreground"
                                     >
                                         <div className="flex items-center justify-between">
@@ -234,6 +235,12 @@ export function AccountsTable({
                                                             showCopyButton
                                                         />
                                                     </TableCell>
+                                                    {/*<TableCell>*/}
+                                                    {/*    <AccountRank*/}
+                                                    {/*        account={account}*/}
+                                                    {/*        compact*/}
+                                                    {/*    />*/}
+                                                    {/*</TableCell>*/}
                                                     <TableCell>
                                                         <TextLabel
                                                             content={
@@ -275,22 +282,22 @@ export function AccountsTable({
                                                             </DropdownMenuTrigger>
                                                         ) : null}
                                                         <div className="flex items-center justify-end gap-2">
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                onClick={() =>
-                                                                    onToggleDetails(
-                                                                        detailKey
-                                                                    )
-                                                                }
-                                                                className="h-8 w-8"
-                                                                aria-label={
-                                                                    detailsLabel
-                                                                }
-                                                                data-no-row-select
-                                                            >
-                                                                <DetailsIcon className="h-4 w-4" />
-                                                            </Button>
+                                                            {/*<Button*/}
+                                                            {/*    variant="ghost"*/}
+                                                            {/*    size="icon"*/}
+                                                            {/*    onClick={() =>*/}
+                                                            {/*        onToggleDetails(*/}
+                                                            {/*            detailKey*/}
+                                                            {/*        )*/}
+                                                            {/*    }*/}
+                                                            {/*    className="h-8 w-8"*/}
+                                                            {/*    aria-label={*/}
+                                                            {/*        detailsLabel*/}
+                                                            {/*    }*/}
+                                                            {/*    data-no-row-select*/}
+                                                            {/*>*/}
+                                                            {/*    <DetailsIcon className="h-4 w-4" />*/}
+                                                            {/*</Button>*/}
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"
@@ -342,20 +349,20 @@ export function AccountsTable({
                                                     />
                                                 ) : null}
                                             </DropdownMenu>
-                                            {isExpanded && (
-                                                <TableRow className="bg-muted/20">
-                                                    <TableCell
-                                                        colSpan={5}
-                                                        className="pt-0 pb-4"
-                                                    >
-                                                        <div className="rounded-md border border-muted/40 bg-muted/10 p-4">
-                                                            <AccountDetails
-                                                                account={account}
-                                                            />
-                                                        </div>
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
+                                            {/*{isExpanded && (*/}
+                                            {/*    <TableRow className="bg-muted/20">*/}
+                                            {/*        <TableCell*/}
+                                            {/*            colSpan={6}*/}
+                                            {/*            className="pt-0 pb-4"*/}
+                                            {/*        >*/}
+                                            {/*            <div className="rounded-md border border-muted/40 bg-muted/10 p-4">*/}
+                                            {/*                <AccountDetails*/}
+                                            {/*                    account={account}*/}
+                                            {/*                />*/}
+                                            {/*            </div>*/}
+                                            {/*        </TableCell>*/}
+                                            {/*    </TableRow>*/}
+                                            {/*)}*/}
                                         </Fragment>
                                     );
                                 })}
