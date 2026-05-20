@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { describe, expect, it, vi } from "vitest";
 
@@ -231,6 +231,55 @@ describe("AddAccountDialog", () => {
 
         expect(gameSelect).toHaveValue("Fortnite");
         expect(screen.queryByLabelText("Custom game name")).not.toBeInTheDocument();
+    });
+
+    it("portals the edit modal to the page body so centering is not affected by the account page layout", () => {
+        const { container } = renderWithMantine(
+            <div data-testid="account-page-panel">
+                <AddAccountDialog
+                    open
+                    setOpen={vi.fn()}
+                    handleSubmit={vi.fn()}
+                    groups={groups}
+                    defaultGroupId="personal"
+                    defaultValues={{
+                        game: "Roblox",
+                        username: "Builderman",
+                        password: "Secret123!",
+                        groupId: "personal",
+                    }}
+                />
+            </div>
+        );
+
+        expect(screen.getByRole("dialog", { name: "Update account" })).toBeInTheDocument();
+        expect(within(container).queryByRole("dialog", { name: "Update account" })).not.toBeInTheDocument();
+    });
+
+    it("renders the selected game icon as a compact affordance with room inside the select", () => {
+        renderWithMantine(
+            <AddAccountDialog
+                open
+                setOpen={vi.fn()}
+                handleSubmit={vi.fn()}
+                groups={groups}
+                defaultGroupId="personal"
+                defaultValues={{
+                    game: "Roblox",
+                    username: "Builderman",
+                    password: "Secret123!",
+                    groupId: "personal",
+                }}
+            />
+        );
+
+        const gameIcon = screen.getByTestId("game-select-icon");
+        const gameSelect = screen.getByLabelText("Game");
+
+        expect(gameIcon).toHaveClass("h-5", "w-5");
+        expect(gameSelect.closest(".mantine-Input-wrapper")).toHaveStyle({
+            "--input-left-section-width": "calc(2.75rem * var(--mantine-scale))",
+        });
     });
 
     it("uses the controlled open change handler when the modal is closed", () => {

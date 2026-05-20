@@ -106,7 +106,8 @@ export default function AddAccountDialog({
             return (
                 <Box
                     component="img"
-                    className="h-8 w-8 rounded-md object-cover"
+                    data-testid="game-select-icon"
+                    className="h-5 w-5 rounded object-cover"
                     src={icon}
                     alt={label}
                 />
@@ -121,7 +122,10 @@ export default function AddAccountDialog({
             .toUpperCase();
 
         return (
-            <Box className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-xs font-semibold text-muted-foreground">
+            <Box
+                data-testid="game-select-icon"
+                className="flex h-5 w-5 items-center justify-center rounded bg-muted text-[10px] font-semibold text-muted-foreground"
+            >
                 {initials}
             </Box>
         );
@@ -137,7 +141,6 @@ export default function AddAccountDialog({
             opened={open}
             onClose={() => setOpen(false)}
             centered
-            withinPortal={false}
             size="lg"
             title={isEditing ? "Update account" : "Add account"}
         >
@@ -177,6 +180,7 @@ export default function AddAccountDialog({
                                 },
                             ]}
                             leftSection={gameSelectIcon}
+                            leftSectionWidth={44}
                         />
                         <input type="hidden" name="game" value={resolvedGameValue} />
                         {isCreatingCustomGame ? (
