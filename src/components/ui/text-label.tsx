@@ -90,11 +90,11 @@ export function TextLabel({
 
     const contentSurface =
         colorScheme === "dark"
-            ? {
-                  background: alpha(theme.colors.dark[6], 0.92),
-                  border: alpha(theme.white, 0.12),
-                  text: theme.colors.gray[1],
-                  muted: theme.colors.gray[5],
+              ? {
+                  background: "rgba(15, 23, 42, 0.76)",
+                  border: "rgba(148, 163, 184, 0.18)",
+                  text: "#e2e8f0",
+                  muted: "#94a3b8",
                   success: theme.colors.green[4],
               }
             : {

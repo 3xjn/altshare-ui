@@ -84,13 +84,13 @@ export function AccountsTable({
     const tableTone =
         colorScheme === "dark"
             ? {
-                  section: alpha(theme.white, 0.04),
-                  hover: alpha(theme.white, 0.035),
-                  selected: alpha(theme.colors.blue[5], 0.14),
-                  selectedBorder: alpha(theme.colors.blue[4], 0.24),
-                  header: theme.colors.gray[4],
-                  sectionText: theme.colors.gray[0],
-                  border: alpha(theme.white, 0.08),
+                  section: "rgba(30, 41, 59, 0.72)",
+                  hover: "rgba(51, 65, 85, 0.42)",
+                  selected: alpha(theme.colors.blue[6], 0.22),
+                  selectedBorder: alpha(theme.colors.blue[3], 0.45),
+                  header: "#94a3b8",
+                  sectionText: "#e2e8f0",
+                  border: "rgba(148, 163, 184, 0.14)",
               }
             : {
                   section: alpha(theme.colors.gray[2], 0.55),
@@ -100,6 +100,18 @@ export function AccountsTable({
                   header: theme.colors.gray[6],
                   sectionText: theme.colors.dark[7],
                   border: alpha(theme.black, 0.06),
+              };
+    const tableSurface =
+        colorScheme === "dark"
+            ? {
+                  background: "rgba(15, 23, 42, 0.72)",
+                  border: "rgba(148, 163, 184, 0.16)",
+                  shadow: "0 24px 80px rgba(2, 6, 23, 0.28)",
+              }
+            : {
+                  background: "transparent",
+                  border: "transparent",
+                  shadow: "none",
               };
 
     const shouldIgnoreRowSelection = (event: React.MouseEvent) => {
@@ -113,6 +125,15 @@ export function AccountsTable({
 
     return (
         <div className="px-4 sm:px-6">
+            <div
+                data-testid="accounts-table-shell"
+                className="rounded-2xl border"
+                style={{
+                    backgroundColor: tableSurface.background,
+                    borderColor: tableSurface.border,
+                    boxShadow: tableSurface.shadow,
+                }}
+            >
             <Menu
                 opened={isContextMenuOpen}
                 onChange={(open) =>
@@ -233,7 +254,11 @@ export function AccountsTable({
                         ) : (
                             sections.map((section) => (
                                 <Fragment key={`section-${section.id}`}>
-                                    <Table.Tr className="border-b" style={{ backgroundColor: tableTone.section, borderColor: tableTone.border }}>
+                                    <Table.Tr
+                                        className="border-b"
+                                        data-testid={`accounts-section-${section.id}`}
+                                        style={{ backgroundColor: tableTone.section, borderColor: tableTone.border }}
+                                    >
                                         <Table.Td
                                             colSpan={columnCount}
                                             className="p-2 align-middle text-sm font-semibold"
@@ -392,6 +417,7 @@ export function AccountsTable({
                     </Table.Tbody>
                 </Table>
             </ScrollArea>
+            </div>
         </div>
     );
 }

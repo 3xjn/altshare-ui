@@ -47,9 +47,12 @@ if (!globalThis.ResizeObserver) {
     });
 }
 
-function renderWithMantine(ui: React.ReactNode) {
+function renderWithMantine(
+    ui: React.ReactNode,
+    colorScheme: "light" | "dark" = "light"
+) {
     return render(
-        <MantineProvider theme={mantineTheme} forceColorScheme="light">
+        <MantineProvider theme={mantineTheme} forceColorScheme={colorScheme}>
             {ui}
         </MantineProvider>
     );
@@ -199,6 +202,22 @@ describe("AccountsTable", () => {
         );
 
         expect(screen.getByText("Loading accounts...")).toBeInTheDocument();
+    });
+
+    it("uses layered dark table surfaces instead of flat gray panels", () => {
+        renderWithMantine(
+            <AccountsTable {...createAccountsTableProps()} />,
+            "dark"
+        );
+
+        expect(screen.getByTestId("accounts-table-shell")).toHaveStyle({
+            backgroundColor: "rgba(15, 23, 42, 0.72)",
+            borderColor: "rgba(148, 163, 184, 0.16)",
+            boxShadow: "0 24px 80px rgba(2, 6, 23, 0.28)",
+        });
+        expect(screen.getByTestId("accounts-section-personal")).toHaveStyle({
+            backgroundColor: "rgba(30, 41, 59, 0.72)",
+        });
     });
 
     it("renders an actionable empty state when there are no accounts", () => {

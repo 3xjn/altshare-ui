@@ -46,9 +46,9 @@ vi.mock("@/components/use-theme", () => ({
     useTheme: vi.fn(),
 }));
 
-function renderShell() {
+function renderShell(colorScheme: "light" | "dark" = "light") {
     return render(
-        <MantineProvider theme={mantineTheme} forceColorScheme="light">
+        <MantineProvider theme={mantineTheme} forceColorScheme={colorScheme}>
             <MemoryRouter initialEntries={["/accounts"]}>
                 <Routes>
                     <Route path="/" element={<WorkspaceShell />}>
@@ -78,5 +78,27 @@ describe("WorkspaceShell", () => {
         expect(themeButton).toBeInTheDocument();
         fireEvent.click(themeButton);
         expect(setTheme).toHaveBeenCalledWith("dark");
+    });
+
+    it("uses layered dark surfaces instead of one flat gray shell", () => {
+        vi.mocked(useTheme).mockReturnValue({
+            theme: "dark",
+            resolvedTheme: "dark",
+            setTheme: vi.fn(),
+        });
+
+        renderShell("dark");
+
+        expect(screen.getByTestId("workspace-shell-header")).toHaveStyle({
+            backgroundColor: "#0f172a",
+            borderBottom: "1px solid rgba(148, 163, 184, 0.16)",
+        });
+        expect(screen.getByTestId("workspace-shell-navbar")).toHaveStyle({
+            backgroundColor: "#0b1120",
+            borderRight: "1px solid rgba(148, 163, 184, 0.14)",
+        });
+        expect(screen.getByTestId("workspace-shell-main")).toHaveStyle({
+            background: "linear-gradient(180deg, #07111f 0%, #0b1220 45%, #111827 100%)",
+        });
     });
 });
