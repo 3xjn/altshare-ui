@@ -226,6 +226,35 @@ describe("AccountsTable", () => {
         expect(onAddAccount).toHaveBeenCalledTimes(1);
     });
 
+    it("does not select a row when clicking an inner account control", () => {
+        Object.assign(navigator, {
+            clipboard: {
+                writeText: vi.fn(async () => undefined),
+            },
+        });
+        const onRowMouseDown = vi.fn();
+        const onRowClick = vi.fn();
+
+        renderWithMantine(
+            <AccountsTable
+                {...createAccountsTableProps({
+                    onRowMouseDown,
+                    onRowClick,
+                })}
+            />
+        );
+
+        const copyUsernameButton = screen.getAllByRole("button", {
+            name: "Copy content to clipboard",
+        })[0];
+
+        fireEvent.mouseDown(copyUsernameButton);
+        fireEvent.click(copyUsernameButton);
+
+        expect(onRowMouseDown).not.toHaveBeenCalled();
+        expect(onRowClick).not.toHaveBeenCalled();
+    });
+
     it("opens the single-row context menu on right click for an unselected row", async () => {
         const onBulkMove = vi.fn();
 

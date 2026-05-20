@@ -102,6 +102,15 @@ export function AccountsTable({
                   border: alpha(theme.black, 0.06),
               };
 
+    const shouldIgnoreRowSelection = (event: React.MouseEvent) => {
+        const target = event.target as HTMLElement | null;
+        return Boolean(
+            target?.closest(
+                "button, a, input, textarea, select, [data-no-row-select='true']"
+            )
+        );
+    };
+
     return (
         <div className="px-4 sm:px-6">
             <Menu
@@ -287,25 +296,35 @@ export function AccountsTable({
                                                     }
                                                     onMouseDown={
                                                         isSelectable
-                                                            ? onRowMouseDown
+                                                            ? (event) => {
+                                                                  if (!shouldIgnoreRowSelection(event)) {
+                                                                      onRowMouseDown(event);
+                                                                  }
+                                                              }
                                                             : undefined
                                                     }
                                                     onContextMenuCapture={
                                                         isSelectable
-                                                            ? (event) =>
-                                                                  onRowContextMenu(
-                                                                      event,
-                                                                      account
-                                                                  )
+                                                            ? (event) => {
+                                                                  if (!shouldIgnoreRowSelection(event)) {
+                                                                      onRowContextMenu(
+                                                                          event,
+                                                                          account
+                                                                      );
+                                                                  }
+                                                              }
                                                             : undefined
                                                     }
                                                     onClick={
                                                         isSelectable
-                                                            ? (event) =>
-                                                                  onRowClick(
-                                                                      event,
-                                                                      account
-                                                                  )
+                                                            ? (event) => {
+                                                                  if (!shouldIgnoreRowSelection(event)) {
+                                                                      onRowClick(
+                                                                          event,
+                                                                          account
+                                                                      );
+                                                                  }
+                                                              }
                                                             : undefined
                                                     }
                                                     onMouseEnter={(event) => {

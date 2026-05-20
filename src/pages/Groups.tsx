@@ -9,7 +9,7 @@ import {
     Text,
     TextInput,
 } from "@mantine/core";
-import { FolderPen, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useAccountStore } from "@/stores/AccountStore";
@@ -57,6 +57,16 @@ export function Groups() {
     if (!isAuthenticated) {
         return <Navigate to="/login" replace />;
     }
+
+    const openCreateModal = () => {
+        setDraftName("");
+        setCreateOpen(true);
+    };
+
+    const openRenameModal = (groupId: string, groupName: string) => {
+        setEditGroupId(groupId);
+        setDraftName(groupName);
+    };
 
     const handleCreate = async () => {
         const trimmedName = draftName.trim();
@@ -117,54 +127,72 @@ export function Groups() {
     };
 
     return (
-        <Stack gap="lg">
-            <Group justify="space-between" align="flex-end">
+        <Stack gap="md" maw={820}>
+            <Group justify="space-between" align="flex-end" gap="md" wrap="wrap">
                 <div>
                     <Text size="xl" fw={700}>Groups</Text>
                     <Text c="dimmed" size="sm">Manage how your accounts are organized.</Text>
                 </div>
-                <Button onClick={() => { setDraftName(""); setCreateOpen(true); }}>New group</Button>
+                <Button size="sm" leftSection={<Plus size={16} />} onClick={openCreateModal}>
+                    New group
+                </Button>
             </Group>
 
-            <Stack gap="sm">
-                {groupStats.map((group) => (
-                    <Paper key={group.id} withBorder radius="lg" p="lg">
-                        <Group justify="space-between" align="flex-start">
-                            <div>
-                                <Text fw={600}>{group.name}</Text>
-                                <Text c="dimmed" size="sm">
-                                    {group.accountCount} account{group.accountCount === 1 ? "" : "s"}
-                                    {group.usesMasterKey ? " • Default group" : ""}
-                                </Text>
-                            </div>
-                            <Group gap="xs">
-                                {!group.usesMasterKey && (
+            <Paper withBorder radius="lg" p={0} role="list" aria-label="Groups">
+                {groupStats.map((group, index) => (
+                    <Group
+                        key={group.id}
+                        role="listitem"
+                        justify="space-between"
+                        align="center"
+                        gap="sm"
+                        wrap="nowrap"
+                        p="sm"
+                        style={{
+                            borderBottom:
+                                index === groupStats.length - 1
+                                    ? undefined
+                                    : "1px solid var(--mantine-color-default-border)",
+                        }}
+                    >
+                        <Stack gap={2} className="min-w-0">
+                            <Group
+                                gap={4}
+                                wrap="nowrap"
+                                data-testid={`group-title-${group.id}`}
+                                className="min-w-0"
+                            >
+                                <Text fw={600} truncate="end">{group.name}</Text>
+                                {!group.usesMasterKey ? (
                                     <ActionIcon
                                         variant="subtle"
+                                        size="sm"
                                         aria-label={`Rename ${group.name}`}
-                                        onClick={() => {
-                                            setEditGroupId(group.id);
-                                            setDraftName(group.name);
-                                        }}
+                                        onClick={() => openRenameModal(group.id, group.name)}
                                     >
-                                        <FolderPen size={18} />
+                                        <Pencil size={14} />
                                     </ActionIcon>
-                                )}
-                                {!group.usesMasterKey && (
-                                    <ActionIcon
-                                        color="red"
-                                        variant="subtle"
-                                        aria-label={`Delete ${group.name}`}
-                                        onClick={() => void handleDelete(group.id, group.name)}
-                                    >
-                                        <Trash2 size={18} />
-                                    </ActionIcon>
-                                )}
+                                ) : null}
                             </Group>
-                        </Group>
-                    </Paper>
+                            <Text c="dimmed" size="sm">
+                                {group.accountCount} account{group.accountCount === 1 ? "" : "s"}
+                                {group.usesMasterKey ? " • Default group" : ""}
+                            </Text>
+                        </Stack>
+
+                        {!group.usesMasterKey ? (
+                            <ActionIcon
+                                color="red"
+                                variant="subtle"
+                                aria-label={`Delete ${group.name}`}
+                                onClick={() => void handleDelete(group.id, group.name)}
+                            >
+                                <Trash2 size={18} />
+                            </ActionIcon>
+                        ) : null}
+                    </Group>
                 ))}
-            </Stack>
+            </Paper>
 
             <Modal opened={createOpen} onClose={() => setCreateOpen(false)} title="Create group" centered>
                 <Stack>

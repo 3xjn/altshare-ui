@@ -31,14 +31,18 @@ export function AccountsHeader({
                 w="100%"
                 style={{ display: "block" }}
             />
-            <Group gap="sm" wrap="wrap" justify="flex-end">
-                <Button onClick={onAddAccount} leftSection={<Plus className="h-4 w-4" />}>
+            <Group gap="xs" wrap="wrap" justify="flex-end">
+                <Button
+                    onClick={onAddAccount}
+                    size="sm"
+                    leftSection={<Plus className="h-4 w-4" />}
+                >
                     Add account
                 </Button>
                 <Button
                     onClick={onRefresh}
-                    variant="outline"
-                    size="compact-sm"
+                    variant="light"
+                    size="sm"
                     leftSection={<RefreshCcw className="h-4 w-4" />}
                 >
                     Refresh

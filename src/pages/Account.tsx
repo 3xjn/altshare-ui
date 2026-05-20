@@ -1,4 +1,5 @@
-import { Button, Paper, Stack, Text } from "@mantine/core";
+import { Button, Group, Paper, SimpleGrid, Stack, Text } from "@mantine/core";
+import { Download, LogOut } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useAccountStore } from "@/stores/AccountStore";
@@ -11,8 +12,11 @@ export function Account() {
         return <Navigate to="/login" replace />;
     }
 
+    const ownedAccounts = decryptedAccounts.filter((account) => !account.isShared);
+    const savedAccountLabel = `${ownedAccounts.length} saved account${ownedAccounts.length === 1 ? "" : "s"}`;
+    const groupLabel = `${groups.length} group${groups.length === 1 ? "" : "s"}`;
+
     const handleExportData = () => {
-        const ownedAccounts = decryptedAccounts.filter((account) => !account.isShared);
         if (ownedAccounts.length === 0) {
             toast({
                 variant: "destructive",
@@ -60,17 +64,50 @@ export function Account() {
     };
 
     return (
-        <Stack gap="lg">
+        <Stack gap="md" maw={760}>
             <div>
                 <Text size="xl" fw={700}>Account</Text>
-                <Text c="dimmed" size="sm">Manage your account-level actions.</Text>
+                <Text c="dimmed" size="sm">Manage your profile, data export, and session.</Text>
             </div>
 
-            <Paper withBorder radius="lg" p="xl">
-                <Stack gap="sm">
-                    <Text fw={600}>{currentEmail ?? "Signed in"}</Text>
-                    <Button variant="outline" onClick={handleExportData}>Export data</Button>
-                    <Button color="red" variant="light" onClick={logout}>Logout</Button>
+            <Paper withBorder radius="lg" p="md">
+                <Stack gap="md">
+                    <Group justify="space-between" align="flex-start" gap="md" wrap="wrap">
+                        <Stack gap={2}>
+                            <Text fw={600}>Signed in as {currentEmail ?? "Signed in"}</Text>
+                            <Text c="dimmed" size="sm">Your AltShare workspace snapshot.</Text>
+                        </Stack>
+                        <Group gap="xs" data-testid="account-actions" data-layout="inline">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                leftSection={<Download size={16} />}
+                                onClick={handleExportData}
+                            >
+                                Export data
+                            </Button>
+                            <Button
+                                color="red"
+                                variant="light"
+                                size="sm"
+                                leftSection={<LogOut size={16} />}
+                                onClick={logout}
+                            >
+                                Log out
+                            </Button>
+                        </Group>
+                    </Group>
+
+                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xs">
+                        <Paper withBorder radius="md" p="sm">
+                            <Text fw={600}>{savedAccountLabel}</Text>
+                            <Text size="xs" c="dimmed">Owned accounts available for export</Text>
+                        </Paper>
+                        <Paper withBorder radius="md" p="sm">
+                            <Text fw={600}>{groupLabel}</Text>
+                            <Text size="xs" c="dimmed">Groups organizing this workspace</Text>
+                        </Paper>
+                    </SimpleGrid>
                 </Stack>
             </Paper>
         </Stack>

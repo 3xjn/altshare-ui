@@ -1,4 +1,5 @@
 import {
+    ActionIcon,
     AppShell,
     Burger,
     Divider,
@@ -14,9 +15,12 @@ import {
     LayoutGrid,
     Settings,
     Share2,
+    Sun,
+    Moon,
     UserCircle2,
 } from "lucide-react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useTheme } from "@/components/use-theme";
 
 type WorkspaceNavItem = {
     label: string;
@@ -39,6 +43,10 @@ export function WorkspaceShell() {
     const [opened, { toggle }] = useDisclosure(false);
     const navigate = useNavigate();
     const location = useLocation();
+    const { resolvedTheme, setTheme } = useTheme();
+    const nextTheme = resolvedTheme === "dark" ? "light" : "dark";
+    const themeToggleLabel =
+        nextTheme === "dark" ? "Switch to dark theme" : "Switch to light theme";
 
     const renderNavItem = (item: WorkspaceNavItem) => {
         const active =
@@ -71,6 +79,15 @@ export function WorkspaceShell() {
                             AltShare
                         </Text>
                     </Group>
+                    <ActionIcon
+                        variant="subtle"
+                        size="lg"
+                        radius="xl"
+                        aria-label={themeToggleLabel}
+                        onClick={() => setTheme(nextTheme)}
+                    >
+                        {resolvedTheme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+                    </ActionIcon>
                 </Group>
             </AppShell.Header>
 
