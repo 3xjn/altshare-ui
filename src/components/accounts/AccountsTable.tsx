@@ -255,8 +255,19 @@ export function AccountsTable({
                             sections.map((section) => (
                                 <Fragment key={`section-${section.id}`}>
                                     <Table.Tr
-                                        className="border-b"
+                                        className="border-b cursor-pointer"
                                         data-testid={`accounts-section-${section.id}`}
+                                        role="button"
+                                        tabIndex={0}
+                                        aria-expanded={!section.collapsed}
+                                        aria-label={`${section.collapsed ? "Expand" : "Collapse"} ${section.name}`}
+                                        onClick={() => onToggleSection?.(section.id)}
+                                        onKeyDown={(event) => {
+                                            if (event.key === "Enter" || event.key === " ") {
+                                                event.preventDefault();
+                                                onToggleSection?.(section.id);
+                                            }
+                                        }}
                                         style={{ backgroundColor: tableTone.section, borderColor: tableTone.border }}
                                     >
                                         <Table.Td
@@ -267,10 +278,10 @@ export function AccountsTable({
                                             <Group justify="space-between" wrap="nowrap" gap="sm">
                                                 <Group gap="sm" wrap="nowrap">
                                                     <ActionIcon
+                                                        component="span"
                                                         variant="subtle"
                                                         size="sm"
-                                                        aria-label={section.collapsed ? `Expand ${section.name}` : `Collapse ${section.name}`}
-                                                        onClick={() => onToggleSection?.(section.id)}
+                                                        aria-hidden="true"
                                                         data-no-row-select="true"
                                                     >
                                                         {section.collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}

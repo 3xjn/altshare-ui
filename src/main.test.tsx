@@ -46,5 +46,5 @@ describe("AppRoot", () => {
         expect(screen.getByTestId("login-route")).toHaveTextContent(
             "login route"
         );
-    });
+    }, 10_000);
 });

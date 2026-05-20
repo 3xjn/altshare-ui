@@ -245,6 +245,23 @@ describe("AccountsTable", () => {
         expect(onAddAccount).toHaveBeenCalledTimes(1);
     });
 
+    it("collapses a group when clicking anywhere on the group header row", () => {
+        const onToggleSection = vi.fn();
+
+        renderWithMantine(
+            <AccountsTable
+                {...createAccountsTableProps({
+                    onToggleSection,
+                })}
+            />
+        );
+
+        fireEvent.click(screen.getByTestId("accounts-section-personal"));
+
+        expect(onToggleSection).toHaveBeenCalledTimes(1);
+        expect(onToggleSection).toHaveBeenCalledWith("personal");
+    });
+
     it("does not select a row when clicking an inner account control", () => {
         Object.assign(navigator, {
             clipboard: {
