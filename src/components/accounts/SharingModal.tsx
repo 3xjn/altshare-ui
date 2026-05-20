@@ -1,12 +1,12 @@
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { CircularProgress } from "@/components/ui/progress";
+    Button,
+    Group,
+    Loader,
+    Modal,
+    Paper,
+    Stack,
+    Text,
+} from "@mantine/core";
 import type { SharingRelationship } from "@/services/AccountApi";
 
 type SharingModalProps = {
@@ -37,45 +37,52 @@ export function SharingModal({
     onSelectRevokeTarget,
 }: SharingModalProps) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                    <DialogTitle>Sharing</DialogTitle>
-                    <DialogDescription>
-                        Manage access you have granted to your groups.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                            <div className="text-sm font-semibold">
-                                Active shares
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                                These are the groups you have shared with
-                                others.
-                            </p>
-                        </div>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={onRefresh}
-                            disabled={isLoading}
-                        >
-                            Refresh
-                        </Button>
+        <Modal
+            opened={open}
+            onClose={() => onOpenChange(false)}
+            centered
+            withinPortal={false}
+            size="xl"
+            title="Sharing"
+        >
+            <Stack gap="md">
+                <Text c="dimmed" size="sm">
+                    Manage access you have granted to your groups.
+                </Text>
+                <Group justify="space-between" align="flex-start">
+                    <div>
+                        <Text size="sm" fw={600}>
+                            Active shares
+                        </Text>
+                        <Text size="sm" c="dimmed">
+                            These are the groups you have shared with others.
+                        </Text>
                     </div>
-                    {revokeTarget ? (
-                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-                            <div className="text-sm font-semibold">
-                                Revoke access for{" "}
-                                {revokeTarget.sharedWithEmail}?
-                            </div>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                                This stops future access. If they already saved
-                                data locally, it will remain on their device.
-                            </p>
-                            <div className="mt-3 flex justify-end gap-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={onRefresh}
+                        disabled={isLoading}
+                    >
+                        Refresh
+                    </Button>
+                </Group>
+                {revokeTarget ? (
+                    <Paper
+                        withBorder
+                        radius="md"
+                        p="md"
+                        className="border-destructive/30 bg-destructive/5"
+                    >
+                        <Stack gap="sm">
+                            <Text size="sm" fw={600}>
+                                Revoke access for {revokeTarget.sharedWithEmail}?
+                            </Text>
+                            <Text size="sm" c="dimmed">
+                                This stops future access. If they already saved data
+                                locally, it will remain on their device.
+                            </Text>
+                            <Group justify="flex-end">
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -84,83 +91,85 @@ export function SharingModal({
                                     Cancel
                                 </Button>
                                 <Button
-                                    variant="destructive"
+                                    color="red"
                                     size="sm"
                                     onClick={onRevokeConfirm}
                                     disabled={isRevoking}
+                                    loading={isRevoking}
                                 >
-                                    {isRevoking
-                                        ? "Revoking..."
-                                        : "Revoke access"}
+                                    Revoke access
                                 </Button>
-                            </div>
-                        </div>
-                    ) : null}
-                    {isLoading ? (
-                        <div className="flex items-center justify-center gap-3 py-8 text-sm text-muted-foreground">
-                            <CircularProgress />
+                            </Group>
+                        </Stack>
+                    </Paper>
+                ) : null}
+                {isLoading ? (
+                    <Group justify="center" gap="sm" py="xl">
+                        <Loader size="sm" />
+                        <Text size="sm" c="dimmed">
                             Loading shared access...
-                        </div>
-                    ) : sharingRelationships.length > 0 ? (
-                        <div className="space-y-3">
-                            {sharingRelationships.map((relationship) => {
-                                const createdAt = new Date(
-                                    relationship.createdAt
-                                );
-                                const createdLabel = Number.isNaN(
-                                    createdAt.getTime()
-                                )
-                                    ? "Unknown"
-                                    : createdAt.toLocaleDateString();
-                                const groupLabel =
-                                    relationship.groupName ||
-                                    groupLookup.get(relationship.groupId) ||
-                                    "Group";
+                        </Text>
+                    </Group>
+                ) : sharingRelationships.length > 0 ? (
+                    <Stack gap="sm">
+                        {sharingRelationships.map((relationship) => {
+                            const createdAt = new Date(relationship.createdAt);
+                            const createdLabel = Number.isNaN(
+                                createdAt.getTime()
+                            )
+                                ? "Unknown"
+                                : createdAt.toLocaleDateString();
+                            const groupLabel =
+                                relationship.groupName ||
+                                groupLookup.get(relationship.groupId) ||
+                                "Group";
 
-                                return (
-                                    <div
-                                        key={relationship.id}
-                                        className="flex items-start justify-between gap-3 rounded-lg border px-4 py-3"
-                                    >
+                            return (
+                                <Paper
+                                    key={relationship.id}
+                                    withBorder
+                                    radius="md"
+                                    p="md"
+                                >
+                                    <Group justify="space-between" align="flex-start">
                                         <div>
-                                            <div className="text-sm font-semibold text-foreground">
+                                            <Text size="sm" fw={600}>
                                                 {groupLabel}
-                                            </div>
-                                            <div className="text-sm text-muted-foreground">
-                                                Shared with{" "}
-                                                {relationship.sharedWithEmail}
-                                            </div>
-                                            <div className="text-xs text-muted-foreground">
+                                            </Text>
+                                            <Text size="sm" c="dimmed">
+                                                Shared with {relationship.sharedWithEmail}
+                                            </Text>
+                                            <Text size="xs" c="dimmed">
                                                 Shared on {createdLabel}
-                                            </div>
+                                            </Text>
                                         </div>
                                         <Button
                                             variant="outline"
                                             size="sm"
                                             onClick={() =>
-                                                onSelectRevokeTarget(
-                                                    relationship
-                                                )
+                                                onSelectRevokeTarget(relationship)
                                             }
                                             disabled={isRevoking}
                                         >
                                             Revoke
                                         </Button>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+                                    </Group>
+                                </Paper>
+                            );
+                        })}
+                    </Stack>
+                ) : (
+                    <Paper withBorder radius="md" p="lg" className="border-dashed">
+                        <Text size="sm" c="dimmed">
                             No active shares yet. Use Invite to share a group.
-                        </div>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                        Revoking access stops future sync. If someone saved data
-                        locally, it will remain on their device.
-                    </p>
-                </div>
-            </DialogContent>
-        </Dialog>
+                        </Text>
+                    </Paper>
+                )}
+                <Text size="xs" c="dimmed">
+                    Revoking access stops future sync. If someone saved data locally,
+                    it will remain on their device.
+                </Text>
+            </Stack>
+        </Modal>
     );
 }

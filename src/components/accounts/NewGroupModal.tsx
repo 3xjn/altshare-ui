@@ -1,7 +1,4 @@
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
 
 type NewGroupModalProps = {
     open: boolean;
@@ -19,30 +16,32 @@ export function NewGroupModal({
     onSubmit,
 }: NewGroupModalProps) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-sm">
-                <DialogHeader>
-                    <DialogTitle>New Group</DialogTitle>
-                    <DialogDescription>
-                        Create a group to control what you share.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-2">
-                    <Label htmlFor="group-name">Group name</Label>
-                    <Input
-                        id="group-name"
-                        value={name}
-                        onChange={(event) => onNameChange(event.target.value)}
-                        placeholder="e.g. Friends"
-                    />
-                </div>
-                <div className="flex justify-end gap-3">
+        <Modal
+            opened={open}
+            onClose={() => onOpenChange(false)}
+            centered
+            withinPortal={false}
+            size="sm"
+            title="New Group"
+        >
+            <Stack gap="md">
+                <Text c="dimmed" size="sm">
+                    Create a group to control what you share.
+                </Text>
+                <TextInput
+                    label="Group name"
+                    id="group-name"
+                    value={name}
+                    onChange={(event) => onNameChange(event.currentTarget.value)}
+                    placeholder="e.g. Friends"
+                />
+                <Group justify="flex-end">
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         Cancel
                     </Button>
                     <Button onClick={onSubmit}>Create group</Button>
-                </div>
-            </DialogContent>
-        </Dialog>
+                </Group>
+            </Stack>
+        </Modal>
     );
 }

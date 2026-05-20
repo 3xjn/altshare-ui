@@ -1,4 +1,4 @@
-import { Stack } from "@/components/ui/stack";
+import { Box, Group, Text } from "@mantine/core";
 import { getGameConfig } from "@/config/games";
 
 type GameBadgeProps = {
@@ -27,24 +27,18 @@ export function GameBadge({ game }: GameBadgeProps) {
             .toUpperCase();
 
         return (
-            <div className="w-8 h-8 rounded-md bg-muted text-xs font-semibold text-muted-foreground flex items-center justify-center">
+            <Box className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-xs font-semibold text-muted-foreground">
                 {initials}
-            </div>
+            </Box>
         );
     };
 
     return (
-        <Stack direction="row" align="center" spacing="small">
+        <Group gap="sm" wrap="nowrap">
             {renderIcon()}
-            <span
-                className={
-                    gameConfig.id === "None"
-                        ? "text-sm text-muted-foreground"
-                        : "text-sm text-foreground"
-                }
-            >
+            <Text size="sm" c={gameConfig.id === "None" ? "dimmed" : undefined}>
                 {gameConfig.label}
-            </span>
-        </Stack>
+            </Text>
+        </Group>
     );
 }

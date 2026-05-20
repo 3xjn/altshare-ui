@@ -1,26 +1,27 @@
+import {
+    ActionIcon,
+    Button,
+    Center,
+    Group,
+    Loader,
+    Menu,
+    ScrollArea,
+    Table,
+    Text,
+    alpha,
+    useComputedColorScheme,
+    useMantineTheme,
+} from "@mantine/core";
 import { Fragment, type MutableRefObject } from "react";
 import { TextLabel } from "@/components/ui/text-label";
 import { ExpandableNotes } from "@/components/ui/expandable-notes";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import {
-    DropdownMenu,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ChevronDown, ChevronUp, Pencil, Trash2 } from "lucide-react";
-import type { Account, AccountGroup } from "@/stores/AccountStore";
+import { ChevronDown, ChevronRight, Plus } from "lucide-react";
+import type { Account, AccountGroup } from "@/types/account";
 import type { AccountSection } from "@/components/accounts/types";
 import { SelectionMenuContent } from "@/components/accounts/SelectionMenuContent";
-import { AccountDetails } from "@/components/accounts/AccountDetails";
 import { GameBadge } from "@/components/accounts/GameBadge";
-import { AccountRank } from "@/components/accounts/AccountRank";
+import { AccountRowMenu } from "@/components/accounts/AccountRowMenu";
+import { AccountRowMenuItems } from "@/components/accounts/AccountRowMenuItems";
 
 type AccountsTableProps = {
     isLoading: boolean;
@@ -28,7 +29,6 @@ type AccountsTableProps = {
     totalAccounts: number;
     groups: AccountGroup[];
     selectedAccountIds: Set<string>;
-    expandedAccountKeys: Set<string>;
     contextMenuAccountId: string | null;
     contextMenuPositionRef: MutableRefObject<{
         x: number;
@@ -39,12 +39,13 @@ type AccountsTableProps = {
     onRowClick: (event: React.MouseEvent, account: Account) => void;
     onRowContextMenu: (event: React.MouseEvent, account: Account) => void;
     onContextMenuOpenChange: (open: boolean, accountId: string) => void;
-    onToggleDetails: (detailKey: string) => void;
     onEdit: (account: Account) => void;
     onDelete: (account: Account) => void;
     onBulkMove: (groupId: string) => void;
     onBulkDelete: () => void;
     onClearSelection: () => void;
+    onToggleSection?: (sectionId: string) => void;
+    onAddAccount?: () => void;
 };
 
 export function AccountsTable({
@@ -53,7 +54,6 @@ export function AccountsTable({
     totalAccounts,
     groups,
     selectedAccountIds,
-    expandedAccountKeys,
     contextMenuAccountId,
     contextMenuPositionRef,
     selectedCount,
@@ -66,132 +66,219 @@ export function AccountsTable({
     onBulkMove,
     onBulkDelete,
     onClearSelection,
+    onToggleSection,
+    onAddAccount,
 }: AccountsTableProps) {
-    return (
-        <div className="px-6">
-            <Table className="select-none">
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="w-[140px]">Game</TableHead>
-                        <TableHead className="w-[200px]">Username</TableHead>
-                        {/*<TableHead className="w-[220px]">Rank</TableHead>*/}
-                        <TableHead className="w-[200px]">Password</TableHead>
-                        <TableHead>Notes</TableHead>
-                        <TableHead className="w-[130px] text-right">
-                            Actions
-                        </TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {isLoading ? (
-                        <TableRow>
-                            <TableCell colSpan={6} className="h-32">
-                                <div className="flex items-center justify-center gap-3">
-                                    <svg
-                                        className="animate-spin h-5 w-5 text-muted-foreground"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <circle
-                                            className="opacity-25"
-                                            cx="12"
-                                            cy="12"
-                                            r="10"
-                                            stroke="currentColor"
-                                            strokeWidth="4"
-                                        ></circle>
-                                        <path
-                                            className="opacity-75"
-                                            fill="currentColor"
-                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                        ></path>
-                                    </svg>
-                                    <span className="text-sm text-muted-foreground">
-                                        Loading accounts...
-                                    </span>
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                    ) : totalAccounts === 0 ? (
-                        <TableRow>
-                            <TableCell colSpan={6} className="h-32">
-                                <div className="flex flex-col items-center justify-center text-center">
-                                    <h3 className="font-medium">
-                                        No accounts yet
-                                    </h3>
-                                    <p className="text-sm text-muted-foreground">
-                                        Add an account to get started
-                                    </p>
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                    ) : (
-                        sections.map((section) => (
-                            <Fragment key={`section-${section.id}`}>
-                                <TableRow className="bg-muted/30">
-                                    <TableCell
-                                        colSpan={6}
-                                        className="text-sm font-semibold text-foreground"
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <span>{section.name}</span>
-                                            <span className="text-xs text-muted-foreground">
-                                                {section.accounts.length}{" "}
-                                                accounts
-                                            </span>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                                {section.accounts.map((account, index) => {
-                                    const isSelectable =
-                                        !account.isShared && !!account.id;
-                                    const isSelected =
-                                        isSelectable &&
-                                        selectedAccountIds.has(account.id);
-                                    const rowKey = account.id
-                                        ? account.id
-                                        : `${section.id}-${index}`;
-                                    const detailKey = account.id
-                                        ? account.id
-                                        : rowKey;
-                                    const isExpanded =
-                                        expandedAccountKeys.has(detailKey);
-                                    const isContextMenuOpen =
-                                        isSelectable &&
-                                        account.id === contextMenuAccountId;
-                                    const DetailsIcon = isExpanded
-                                        ? ChevronUp
-                                        : ChevronDown;
-                                    const detailsLabel = isExpanded
-                                        ? "Collapse details"
-                                        : "Expand details";
-                                    const rowClassName = [
-                                        "group hover:bg-accent/5",
-                                        "select-none",
-                                        isSelectable ? "cursor-pointer" : "",
-                                        isSelected
-                                            ? "bg-gradient-to-r from-accent/45 via-accent/25 to-transparent"
-                                            : "",
-                                    ]
-                                        .filter(Boolean)
-                                        .join(" ");
+    const theme = useMantineTheme();
+    const colorScheme = useComputedColorScheme("light", {
+        getInitialValueInEffect: false,
+    });
+    const isContextMenuOpen = contextMenuAccountId !== null;
+    const columnCount = 5;
+    const contextMenuAccount =
+        contextMenuAccountId !== null
+            ? sections
+                  .flatMap((section) => section.accounts)
+                  .find((account) => account.id === contextMenuAccountId) ?? null
+            : null;
+    const tableTone =
+        colorScheme === "dark"
+            ? {
+                  section: alpha(theme.white, 0.04),
+                  hover: alpha(theme.white, 0.035),
+                  selected: alpha(theme.colors.blue[5], 0.14),
+                  selectedBorder: alpha(theme.colors.blue[4], 0.24),
+                  header: theme.colors.gray[4],
+                  sectionText: theme.colors.gray[0],
+                  border: alpha(theme.white, 0.08),
+              }
+            : {
+                  section: alpha(theme.colors.gray[2], 0.55),
+                  hover: alpha(theme.colors.gray[3], 0.22),
+                  selected: alpha(theme.colors.blue[1], 0.9),
+                  selectedBorder: alpha(theme.colors.blue[5], 0.18),
+                  header: theme.colors.gray[6],
+                  sectionText: theme.colors.dark[7],
+                  border: alpha(theme.black, 0.06),
+              };
 
-                                    return (
-                                        <Fragment key={rowKey}>
-                                                <DropdownMenu
-                                                    open={isContextMenuOpen}
-                                                    onOpenChange={(open) =>
-                                                        account.id
-                                                            ? onContextMenuOpenChange(
-                                                                  open,
-                                                                  account.id
-                                                              )
-                                                            : undefined
-                                                    }
+    return (
+        <div className="px-4 sm:px-6">
+            <Menu
+                opened={isContextMenuOpen}
+                onChange={(open) =>
+                    contextMenuAccountId
+                        ? onContextMenuOpenChange(open, contextMenuAccountId)
+                        : undefined
+                }
+                position="bottom-start"
+                shadow="md"
+                width={224}
+                offset={4}
+                withinPortal
+            >
+                <Menu.Target>
+                    <span
+                        aria-hidden
+                        className="pointer-events-none fixed h-0 w-0"
+                        style={{
+                            left: contextMenuPositionRef.current?.x ?? -9999,
+                            top: contextMenuPositionRef.current?.y ?? -9999,
+                        }}
+                    />
+                </Menu.Target>
+                {selectedCount > 1 ? (
+                    <SelectionMenuContent
+                        groups={groups}
+                        selectedCount={selectedCount}
+                        onBulkMove={onBulkMove}
+                        onBulkDelete={onBulkDelete}
+                        onClearSelection={onClearSelection}
+                    />
+                ) : (
+                    <Menu.Dropdown>
+                        {contextMenuAccount ? (
+                            <AccountRowMenuItems
+                                account={contextMenuAccount}
+                                onEdit={onEdit}
+                                onDelete={onDelete}
+                            />
+                        ) : null}
+                    </Menu.Dropdown>
+                )}
+            </Menu>
+            <ScrollArea type="auto" offsetScrollbars>
+                <Table
+                    className="min-w-[720px] w-full select-none text-sm"
+                    verticalSpacing="xs"
+                >
+                    <Table.Thead className="[&_tr]:border-b">
+                        <Table.Tr>
+                            <Table.Th
+                                className="h-10 px-2 text-left align-middle font-medium"
+                                c={tableTone.header}
+                                style={{ minWidth: "8rem", width: "16%" }}
+                            >
+                                Game
+                            </Table.Th>
+                            <Table.Th
+                                className="h-10 px-2 text-left align-middle font-medium"
+                                c={tableTone.header}
+                                style={{ minWidth: "10rem", width: "22%" }}
+                            >
+                                Username
+                            </Table.Th>
+                            {/*<Table.Th className="h-10 w-[220px] px-2 text-left align-middle font-medium text-muted-foreground">Rank</Table.Th>*/}
+                            <Table.Th
+                                className="h-10 px-2 text-left align-middle font-medium"
+                                c={tableTone.header}
+                                style={{ minWidth: "10rem", width: "22%" }}
+                            >
+                                Password
+                            </Table.Th>
+                            <Table.Th className="h-10 px-2 text-left align-middle font-medium" c={tableTone.header}>
+                                Notes
+                            </Table.Th>
+                            <Table.Th
+                                className="h-10 px-2 text-right align-middle font-medium"
+                                c={tableTone.header}
+                                style={{ minWidth: "3rem", width: "1%" }}
+                            />
+                        </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody className="[&_tr:last-child]:border-0">
+                        {isLoading ? (
+                            <Table.Tr>
+                                <Table.Td colSpan={columnCount} className="h-32 p-2 align-middle">
+                                    <Center>
+                                        <Group gap="sm">
+                                            <Loader type="oval" size="sm" />
+                                            <Text size="sm" c="dimmed">
+                                                Loading accounts...
+                                            </Text>
+                                        </Group>
+                                    </Center>
+                                </Table.Td>
+                            </Table.Tr>
+                        ) : totalAccounts === 0 ? (
+                            <Table.Tr>
+                                <Table.Td colSpan={columnCount} className="h-32 p-2 align-middle">
+                                    <Center>
+                                        <div className="space-y-3 text-center">
+                                            <Text fw={500}>No accounts yet</Text>
+                                            <Text size="sm" c="dimmed">
+                                                Save your first login here so it is ready to share with your group.
+                                            </Text>
+                                            {onAddAccount ? (
+                                                <Button
+                                                    onClick={onAddAccount}
+                                                    leftSection={<Plus className="h-4 w-4" />}
                                                 >
-                                                <TableRow
+                                                    Add your first account
+                                                </Button>
+                                            ) : null}
+                                        </div>
+                                    </Center>
+                                </Table.Td>
+                            </Table.Tr>
+                        ) : (
+                            sections.map((section) => (
+                                <Fragment key={`section-${section.id}`}>
+                                    <Table.Tr className="border-b" style={{ backgroundColor: tableTone.section, borderColor: tableTone.border }}>
+                                        <Table.Td
+                                            colSpan={columnCount}
+                                            className="p-2 align-middle text-sm font-semibold"
+                                            c={tableTone.sectionText}
+                                        >
+                                            <Group justify="space-between" wrap="nowrap" gap="sm">
+                                                <Group gap="sm" wrap="nowrap">
+                                                    <ActionIcon
+                                                        variant="subtle"
+                                                        size="sm"
+                                                        aria-label={section.collapsed ? `Expand ${section.name}` : `Collapse ${section.name}`}
+                                                        onClick={() => onToggleSection?.(section.id)}
+                                                        data-no-row-select="true"
+                                                    >
+                                                        {section.collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                                                    </ActionIcon>
+                                                    <Text inherit>{section.name}</Text>
+                                                </Group>
+                                                <Text size="xs" c="dimmed">
+                                                    {section.totalCount ?? section.accounts.length} accounts
+                                                </Text>
+                                            </Group>
+                                        </Table.Td>
+                                    </Table.Tr>
+                                    {!section.collapsed && section.accounts.map((account, index) => {
+                                        const isSelectable =
+                                            !account.isShared && !!account.id;
+                                        const isSelected =
+                                            isSelectable &&
+                                            selectedAccountIds.has(account.id);
+                                        const rowKey = account.id
+                                            ? account.id
+                                            : `${section.id}-${index}`;
+                                        const rowClassName = [
+                                            "border-b group",
+                                            "select-none",
+                                            isSelectable ? "cursor-pointer" : "",
+                                        ]
+                                            .filter(Boolean)
+                                            .join(" ");
+
+                                        return (
+                                            <Fragment key={rowKey}>
+                                                <Table.Tr
                                                     className={rowClassName}
+                                                    style={{
+                                                        borderColor: tableTone.border,
+                                                        backgroundColor: isSelected
+                                                            ? tableTone.selected
+                                                            : undefined,
+                                                        boxShadow: isSelected
+                                                            ? `inset 3px 0 0 ${tableTone.selectedBorder}`
+                                                            : undefined,
+                                                    }}
                                                     aria-selected={isSelected}
                                                     data-state={
                                                         isSelected
@@ -221,27 +308,39 @@ export function AccountsTable({
                                                                   )
                                                             : undefined
                                                     }
+                                                    onMouseEnter={(event) => {
+                                                        if (!isSelected) {
+                                                            event.currentTarget.style.backgroundColor =
+                                                                tableTone.hover;
+                                                        }
+                                                    }}
+                                                    onMouseLeave={(event) => {
+                                                        event.currentTarget.style.backgroundColor =
+                                                            isSelected
+                                                                ? tableTone.selected
+                                                                : "transparent";
+                                                    }}
                                                 >
-                                                    <TableCell>
+                                                    <Table.Td className="p-2 pl-6 align-middle">
                                                         <GameBadge
                                                             game={account.game}
                                                         />
-                                                    </TableCell>
-                                                    <TableCell className="font-medium">
+                                                    </Table.Td>
+                                                    <Table.Td className="p-2 align-middle font-medium">
                                                         <TextLabel
                                                             content={
                                                                 account.username
                                                             }
                                                             showCopyButton
                                                         />
-                                                    </TableCell>
-                                                    {/*<TableCell>*/}
+                                                    </Table.Td>
+                                                    {/*<Table.Td className="p-2 align-middle">*/}
                                                     {/*    <AccountRank*/}
                                                     {/*        account={account}*/}
                                                     {/*        compact*/}
                                                     {/*    />*/}
-                                                    {/*</TableCell>*/}
-                                                    <TableCell>
+                                                    {/*</Table.Td>*/}
+                                                    <Table.Td className="p-2 align-middle">
                                                         <TextLabel
                                                             content={
                                                                 account.password
@@ -249,128 +348,31 @@ export function AccountsTable({
                                                             showCopyButton
                                                             showEyeButton
                                                         />
-                                                    </TableCell>
-                                                    <TableCell>
+                                                    </Table.Td>
+                                                    <Table.Td className="p-2 align-middle">
                                                         <ExpandableNotes
                                                             content={
-                                                                account.notes ??
-                                                                ""
+                                                                account.notes ?? ""
                                                             }
                                                         />
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        {isContextMenuOpen ? (
-                                                            <DropdownMenuTrigger
-                                                                asChild
-                                                            >
-                                                                <span
-                                                                    aria-hidden
-                                                                    className="fixed h-0 w-0 pointer-events-none"
-                                                                    style={{
-                                                                        left:
-                                                                            contextMenuPositionRef
-                                                                                .current
-                                                                                ?.x ??
-                                                                            0,
-                                                                        top:
-                                                                            contextMenuPositionRef
-                                                                                .current
-                                                                                ?.y ??
-                                                                            0,
-                                                                    }}
-                                                                />
-                                                            </DropdownMenuTrigger>
-                                                        ) : null}
-                                                        <div className="flex items-center justify-end gap-2">
-                                                            {/*<Button*/}
-                                                            {/*    variant="ghost"*/}
-                                                            {/*    size="icon"*/}
-                                                            {/*    onClick={() =>*/}
-                                                            {/*        onToggleDetails(*/}
-                                                            {/*            detailKey*/}
-                                                            {/*        )*/}
-                                                            {/*    }*/}
-                                                            {/*    className="h-8 w-8"*/}
-                                                            {/*    aria-label={*/}
-                                                            {/*        detailsLabel*/}
-                                                            {/*    }*/}
-                                                            {/*    data-no-row-select*/}
-                                                            {/*>*/}
-                                                            {/*    <DetailsIcon className="h-4 w-4" />*/}
-                                                            {/*</Button>*/}
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                onClick={() =>
-                                                                    onEdit(
-                                                                        account
-                                                                    )
-                                                                }
-                                                                className="h-8 w-8"
-                                                            >
-                                                                <Pencil className="h-4 w-4" />
-                                                                <span className="sr-only">
-                                                                    Edit
-                                                                </span>
-                                                            </Button>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                onClick={() =>
-                                                                    onDelete(
-                                                                        account
-                                                                    )
-                                                                }
-                                                                className="h-8 w-8 hover:bg-destructive hover:text-destructive-foreground"
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                                <span className="sr-only">
-                                                                    Delete
-                                                                </span>
-                                                            </Button>
-                                                        </div>
-                                                    </TableCell>
-                                                </TableRow>
-                                                {isSelectable ? (
-                                                    <SelectionMenuContent
-                                                        align="start"
-                                                        className="w-56"
-                                                        groups={groups}
-                                                        selectedCount={
-                                                            selectedCount
-                                                        }
-                                                        onBulkMove={onBulkMove}
-                                                        onBulkDelete={
-                                                            onBulkDelete
-                                                        }
-                                                        onClearSelection={
-                                                            onClearSelection
-                                                        }
-                                                    />
-                                                ) : null}
-                                            </DropdownMenu>
-                                            {/*{isExpanded && (*/}
-                                            {/*    <TableRow className="bg-muted/20">*/}
-                                            {/*        <TableCell*/}
-                                            {/*            colSpan={6}*/}
-                                            {/*            className="pt-0 pb-4"*/}
-                                            {/*        >*/}
-                                            {/*            <div className="rounded-md border border-muted/40 bg-muted/10 p-4">*/}
-                                            {/*                <AccountDetails*/}
-                                            {/*                    account={account}*/}
-                                            {/*                />*/}
-                                            {/*            </div>*/}
-                                            {/*        </TableCell>*/}
-                                            {/*    </TableRow>*/}
-                                            {/*)}*/}
-                                        </Fragment>
-                                    );
-                                })}
-                            </Fragment>
-                        ))
-                    )}
-                </TableBody>
-            </Table>
+                                                    </Table.Td>
+                                                    <Table.Td className="p-2 align-middle text-right">
+                                                        <AccountRowMenu
+                                                            account={account}
+                                                            onEdit={onEdit}
+                                                            onDelete={onDelete}
+                                                        />
+                                                    </Table.Td>
+                                                </Table.Tr>
+                                            </Fragment>
+                                        );
+                                    })}
+                                </Fragment>
+                            ))
+                        )}
+                    </Table.Tbody>
+                </Table>
+            </ScrollArea>
         </div>
     );
 }

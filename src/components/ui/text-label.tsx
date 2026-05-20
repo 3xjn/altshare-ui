@@ -1,9 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import {
+    ActionIcon,
+    Box,
+    Group,
+    Stack,
+    Text,
+    VisuallyHidden,
+    alpha,
+    useComputedColorScheme,
+    useMantineTheme,
+} from "@mantine/core";
 import { Eye, EyeOff, Copy, Check } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 interface TextLabelProps {
@@ -36,96 +45,150 @@ export function TextLabel({
     label,
     className,
 }: TextLabelProps) {
+    const theme = useMantineTheme();
+    const colorScheme = useComputedColorScheme("light", {
+        getInitialValueInEffect: false,
+    });
+    const contentId = useId();
+    const labelId = useId();
     const hiddenPlaceholder = "\u2022".repeat(10);
-    // State to manage visibility when eye button is shown
     const [isVisible, setIsVisible] = useState(false);
-    // State to manage copy status feedback
     const [isCopied, setIsCopied] = useState(false);
+    const copiedTimeoutRef = useRef<number | null>(null);
 
-    /**
-     * Toggle the content visibility if the eye button is shown.
-     */
+    useEffect(() => {
+        return () => {
+            if (copiedTimeoutRef.current !== null) {
+                window.clearTimeout(copiedTimeoutRef.current);
+            }
+        };
+    }, []);
+
     const handleToggleVisibility = () => {
         if (showEyeButton) {
             setIsVisible((prev) => !prev);
         }
     };
 
-    /**
-     * Copy the content to the clipboard and show feedback.
-     */
     const handleCopy = async () => {
         try {
             await navigator.clipboard.writeText(content);
             setIsCopied(true);
-
-            // Reset copied state after a short interval
-            setTimeout(() => setIsCopied(false), 2000);
-        } catch (error) {
-            console.error("Failed to copy text:", error);
+            if (copiedTimeoutRef.current !== null) {
+                window.clearTimeout(copiedTimeoutRef.current);
+            }
+            copiedTimeoutRef.current = window.setTimeout(() => {
+                setIsCopied(false);
+            }, 2000);
+        } catch {
+            setIsCopied(false);
         }
     };
 
-    /**
-     * If the eye button is enabled and the content is hidden, replace the text
-     * with a fixed-length placeholder. Otherwise, display the plain text.
-     */
     const displayContent =
         showEyeButton && !isVisible ? hiddenPlaceholder : content;
 
+    const contentSurface =
+        colorScheme === "dark"
+            ? {
+                  background: alpha(theme.colors.dark[6], 0.92),
+                  border: alpha(theme.white, 0.12),
+                  text: theme.colors.gray[1],
+                  muted: theme.colors.gray[5],
+                  success: theme.colors.green[4],
+              }
+            : {
+                  background: alpha(theme.white, 0.94),
+                  border: alpha(theme.black, 0.08),
+                  text: theme.colors.dark[7],
+                  muted: theme.colors.gray[6],
+                  success: theme.colors.green[6],
+              };
+
     return (
-        <div className={cn("space-y-2 max-w-300 w-full", className)}>
-            {/* Optional label for the field */}
-            {label && <Label htmlFor="text-label-content">{label}</Label>}
+        <Stack gap={4} className={cn("w-full max-w-full", className)}>
+            {label ? (
+                <Text id={labelId} size="sm" fw={500}>
+                    {label}
+                </Text>
+            ) : null}
 
-            <div className="relative flex items-center">
-                <div
-                    id="text-label-content"
-                    className="flex h-10 w-full items-center rounded-md border border-input bg-background px-3 py-2 text-sm pr-20 ring-offset-background"
+            <Box
+                className="relative"
+                role="group"
+                aria-labelledby={label ? labelId : undefined}
+            >
+                <Box
+                    id={contentId}
+                    className="flex h-10 w-full items-center rounded-md border px-3 py-2 pr-20 text-sm"
+                    style={{
+                        backgroundColor: contentSurface.background,
+                        borderColor: contentSurface.border,
+                    }}
+                    aria-label={showEyeButton && !isVisible ? "Hidden content" : content}
                 >
-                    {/* Truncate long text and show a monospace style for clarity */}
-                    <span className="truncate font-mono">{displayContent}</span>
-                </div>
+                    <Text
+                        component="span"
+                        span
+                        truncate="end"
+                        ff="monospace"
+                        size="sm"
+                        w="100%"
+                        c={showEyeButton && !isVisible ? contentSurface.muted : contentSurface.text}
+                    >
+                        {displayContent}
+                    </Text>
+                </Box>
 
-                {/* Action buttons (eye and copy) */}
-                <div className="absolute right-0 flex items-center pr-2">
+                <Group
+                    gap={4}
+                    wrap="nowrap"
+                    className="absolute inset-y-0 right-0 pr-2"
+                >
                     {showCopyButton && (
-                        <Button
-                            variant="ghost"
-                            size="icon"
+                        <ActionIcon
+                            variant="subtle"
+                            size="lg"
                             onClick={handleCopy}
-                            className="h-8 w-8"
                             aria-label={
-                                isCopied ? "Copied" : "Copy to clipboard"
+                                isCopied
+                                    ? `${label ?? "Content"} copied`
+                                    : `Copy ${label ?? "content"} to clipboard`
                             }
+                            style={{ color: isCopied ? contentSurface.success : contentSurface.muted }}
                         >
                             {isCopied ? (
-                                <Check className="h-4 w-4 text-primary" />
+                                <Check className="h-4 w-4" />
                             ) : (
                                 <Copy className="h-4 w-4" />
                             )}
-                        </Button>
+                        </ActionIcon>
                     )}
 
-{showEyeButton && (
-                        <Button
-                            variant="ghost"
-                            size="icon"
+                    {showEyeButton && (
+                        <ActionIcon
+                            variant="subtle"
+                            size="lg"
                             onClick={handleToggleVisibility}
-                            className="h-8 w-8"
+                            aria-controls={contentId}
+                            aria-pressed={isVisible}
                             aria-label={
                                 isVisible ? "Hide content" : "Show content"
                             }
+                            style={{ color: contentSurface.muted }}
                         >
                             {isVisible ? (
                                 <EyeOff className="h-4 w-4" />
                             ) : (
                                 <Eye className="h-4 w-4" />
                             )}
-                        </Button>
+                        </ActionIcon>
                     )}
-                </div>
-            </div>
-        </div>
+                </Group>
+                <VisuallyHidden aria-live="polite">
+                    {isCopied ? `${label ?? "Content"} copied to clipboard` : ""}
+                </VisuallyHidden>
+            </Box>
+        </Stack>
     );
 }

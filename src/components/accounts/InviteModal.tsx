@@ -1,22 +1,15 @@
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
+    Button,
+    Group,
+    Loader,
+    Modal,
+    NativeSelect,
+    Paper,
+    Stack,
+    Text,
+} from "@mantine/core";
 import { TextLabel } from "@/components/ui/text-label";
-import { CircularProgress } from "@/components/ui/progress";
-import type { AccountGroup } from "@/stores/AccountStore";
+import type { AccountGroup } from "@/types/account";
 
 type InviteModalProps = {
     open: boolean;
@@ -54,81 +47,75 @@ export function InviteModal({
     const inviteLink = inviteCode
         ? `${window.location.origin}/invite?code=${inviteCode}`
         : "";
+    const resolvedShareGroupId = shareGroupId ?? defaultGroupId ?? "";
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-xl">
-                <DialogHeader>
-                    <DialogTitle>
-                        {shareOpen ? "Share access" : "Invite access"}
-                    </DialogTitle>
-                    <DialogDescription>
-                        {shareOpen
-                            ? "Choose a group to share with the connected user."
-                            : "Share a secure link to grant access to a group."}
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                    {shareOpen ? (
-                        <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+        <Modal
+            opened={open}
+            onClose={() => onOpenChange(false)}
+            centered
+            withinPortal={false}
+            size="xl"
+            title={shareOpen ? "Share access" : "Invite access"}
+        >
+            <Stack gap="md">
+                <Text c="dimmed" size="sm">
+                    {shareOpen
+                        ? "Choose a group to share with the connected user."
+                        : "Share a secure link to grant access to a group."}
+                </Text>
+                {shareOpen ? (
+                    <Paper withBorder radius="md" p="md">
+                        <Stack gap="md">
                             <div>
-                                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                <Text size="xs" fw={600} c="dimmed" className="uppercase tracking-wide">
                                     Connected user
-                                </div>
-                                <div className="text-sm font-semibold text-foreground">
+                                </Text>
+                                <Text size="sm" fw={600}>
                                     {inviteeEmail ?? "Connected user"}
-                                </div>
+                                </Text>
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="share-group-modal">
-                                    Group to share
-                                </Label>
-                                <Select
-                                    value={
-                                        shareGroupId ??
-                                        defaultGroupId ??
-                                        undefined
-                                    }
-                                    onValueChange={onShareGroupIdChange}
-                                >
-                                    <SelectTrigger className="w-full">
-                                        <SelectValue placeholder="Select a group" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {groups.map((group) => (
-                                            <SelectItem
-                                                key={group.id}
-                                                value={group.id}
-                                            >
-                                                {group.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="flex justify-end">
+                            <NativeSelect
+                                label="Group to share"
+                                id="share-group-modal"
+                                value={resolvedShareGroupId}
+                                onChange={(event) =>
+                                    onShareGroupIdChange(
+                                        event.currentTarget.value
+                                    )
+                                }
+                            >
+                                <option value="">Select a group</option>
+                                {groups.map((group) => (
+                                    <option key={group.id} value={group.id}>
+                                        {group.name}
+                                    </option>
+                                ))}
+                            </NativeSelect>
+                            <Group justify="flex-end">
                                 <Button
                                     onClick={onShareGroup}
-                                    disabled={!shareGroupId && !defaultGroupId}
+                                    disabled={!resolvedShareGroupId}
                                 >
                                     Share group
                                 </Button>
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                You can revoke access later from the sharing
-                                manager.
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-                            <div className="flex items-start justify-between gap-3">
+                            </Group>
+                            <Text size="xs" c="dimmed">
+                                You can revoke access later from the sharing manager.
+                            </Text>
+                        </Stack>
+                    </Paper>
+                ) : (
+                    <Paper withBorder radius="md" p="md">
+                        <Stack gap="sm">
+                            <Group justify="space-between" align="flex-start">
                                 <div>
-                                    <div className="text-sm font-semibold">
+                                    <Text size="sm" fw={600}>
                                         Invite link
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
+                                    </Text>
+                                    <Text size="sm" c="dimmed">
                                         Send this link to connect securely.
-                                    </p>
+                                    </Text>
                                 </div>
                                 {inviteCode || isConnecting ? (
                                     <Button
@@ -139,15 +126,17 @@ export function InviteModal({
                                         End invite
                                     </Button>
                                 ) : null}
-                            </div>
-                            <div className="min-h-[44px] flex items-center">
+                            </Group>
+                            <div className="flex min-h-11 items-center">
                                 {isConnecting ? (
-                                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                                        <CircularProgress />
-                                        Creating invite...
-                                    </div>
+                                    <Group gap="sm">
+                                        <Loader size="sm" />
+                                        <Text size="sm" c="dimmed">
+                                            Creating invite...
+                                        </Text>
+                                    </Group>
                                 ) : inviteCode ? (
-                                    <div className="w-full min-w-0">
+                                    <div className="min-w-0 w-full">
                                         <TextLabel
                                             content={inviteLink}
                                             showCopyButton
@@ -155,28 +144,25 @@ export function InviteModal({
                                         />
                                     </div>
                                 ) : (
-                                    <Button
-                                        variant="secondary"
-                                        onClick={onCreateInvite}
-                                    >
+                                    <Button onClick={onCreateInvite}>
                                         Create invite
                                     </Button>
                                 )}
                             </div>
-                            <p className="text-xs text-muted-foreground">
+                            <Text size="xs" c="dimmed">
                                 {inviteCode
                                     ? "Keep this window open until they connect."
                                     : "Create an invite to start sharing."}
-                            </p>
-                        </div>
-                    )}
-                    <div className="flex justify-end">
-                        <Button variant="outline" onClick={onClose}>
-                            Close
-                        </Button>
-                    </div>
-                </div>
-            </DialogContent>
-        </Dialog>
+                            </Text>
+                        </Stack>
+                    </Paper>
+                )}
+                <Group justify="flex-end">
+                    <Button variant="outline" onClick={onClose}>
+                        Close
+                    </Button>
+                </Group>
+            </Stack>
+        </Modal>
     );
 }

@@ -12,6 +12,10 @@ interface CreateGroupRequest {
     encryptedGroupKey: string;
 }
 
+interface UpdateGroupRequest {
+    name: string;
+}
+
 export class GroupApi extends ApiService {
     route: string = "/api/group";
 
@@ -23,6 +27,15 @@ export class GroupApi extends ApiService {
     async createGroup(data: CreateGroupRequest): Promise<AccountGroupResponse> {
         const response = await this.api.post(this.route, data);
         return response.data;
+    }
+
+    async renameGroup(id: string, data: UpdateGroupRequest): Promise<AccountGroupResponse> {
+        const response = await this.api.put(`${this.route}/${id}`, data);
+        return response.data;
+    }
+
+    async deleteGroup(id: string): Promise<void> {
+        await this.api.delete(`${this.route}/${id}`);
     }
 }
 

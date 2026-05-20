@@ -1,27 +1,24 @@
 import "../services/SignalR";
-import { Button } from "@/components/ui/button";
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
+    Box,
+    Button,
+    Modal,
+    NativeSelect,
+    Paper,
+    PasswordInput,
+    Stack,
+    Text,
+    TextInput,
+    Textarea,
+} from "@mantine/core";
 import { useEffect, useMemo, useState } from "react";
-import { Stack } from "./ui/stack";
-import type { AccountGroup } from "@/stores/AccountStore";
-import { GAME_CATALOG, GameId, getGameConfig } from "@/config/games";
+import type { AccountGroup } from "@/types/account";
+import {
+    CUSTOM_GAME_OPTION_ID,
+    getGameCatalog,
+    getGameConfig,
+    isBuiltInGame,
+} from "@/config/games";
 
 interface DefaultValues {
     game?: string;
@@ -31,25 +28,31 @@ interface DefaultValues {
     groupId?: string;
     gameData?: Record<string, string>;
 }
-interface AddAccountDialog {
+interface AddAccountDialogProps {
     open: boolean;
     setOpen: (open: boolean) => void;
     handleSubmit: React.FormEventHandler<HTMLFormElement> | undefined;
+    formRef?: React.Ref<HTMLFormElement>;
     defaultValues?: DefaultValues;
     groups: AccountGroup[];
     defaultGroupId: string | null;
+    existingGames?: string[];
 }
 
 export default function AddAccountDialog({
     open,
     setOpen,
     handleSubmit,
+    formRef,
     defaultValues,
     groups,
     defaultGroupId,
-}: AddAccountDialog) {
+    existingGames = [],
+}: AddAccountDialogProps) {
     const isEditing = Boolean(defaultValues);
-    const [selectedGame, setSelectedGame] = useState<GameId>("None");
+    const [selectedGame, setSelectedGame] = useState("None");
+    const [customGameName, setCustomGameName] = useState("");
+    const [selectedGroupId, setSelectedGroupId] = useState("");
     const initialGroupId = useMemo(() => {
         return (
             defaultValues?.groupId ||
@@ -59,19 +62,51 @@ export default function AddAccountDialog({
         );
     }, [defaultValues?.groupId, defaultGroupId, groups]);
 
-    useEffect(() => {
-        const gameConfig = getGameConfig(defaultValues?.game);
-        setSelectedGame(gameConfig.id);
-    }, [defaultValues?.game]);
+    const availableGames = useMemo(() => {
+        return getGameCatalog([
+            ...existingGames,
+            defaultValues?.game,
+        ]);
+    }, [defaultValues?.game, existingGames]);
 
-    const selectedConfig = getGameConfig(selectedGame);
+    useEffect(() => {
+        const defaultGame = defaultValues?.game?.trim();
+
+        if (!defaultGame || defaultGame === "None") {
+            setSelectedGame("None");
+            setCustomGameName("");
+            return;
+        }
+
+        if (isBuiltInGame(defaultGame)) {
+            setSelectedGame(defaultGame);
+            setCustomGameName("");
+            return;
+        }
+
+        setSelectedGame(defaultGame);
+        setCustomGameName(defaultGame);
+    }, [defaultValues?.game, open]);
+
+    useEffect(() => {
+        setSelectedGroupId(initialGroupId);
+    }, [initialGroupId, open]);
+
+    const isCreatingCustomGame = selectedGame === CUSTOM_GAME_OPTION_ID;
+    const selectedConfig = getGameConfig(
+        isCreatingCustomGame ? customGameName : selectedGame
+    );
     const gameFields = selectedConfig.fields ?? [];
+    const resolvedGameValue = isCreatingCustomGame
+        ? customGameName.trim()
+        : selectedGame;
 
     const renderGameIcon = (label: string, icon?: string) => {
         if (icon) {
             return (
-                <img
-                    className="w-[30px] h-[30px] object-cover rounded-md"
+                <Box
+                    component="img"
+                    className="h-8 w-8 rounded-md object-cover"
                     src={icon}
                     alt={label}
                 />
@@ -86,164 +121,163 @@ export default function AddAccountDialog({
             .toUpperCase();
 
         return (
-            <div className="w-[30px] h-[30px] rounded-md bg-muted text-xs font-semibold text-muted-foreground flex items-center justify-center">
+            <Box className="flex h-8 w-8 items-center justify-center rounded-md bg-muted text-xs font-semibold text-muted-foreground">
                 {initials}
-            </div>
+            </Box>
         );
     };
 
+    const gameSelectIcon =
+        selectedConfig.id !== "None"
+            ? renderGameIcon(selectedConfig.label, selectedConfig.icon)
+            : undefined;
+
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                    <DialogTitle>
-                        {isEditing ? "Update account" : "Add account"}
-                    </DialogTitle>
-                    <DialogDescription>
-                        {isEditing
-                            ? "Update the account details and save your changes."
-                            : "Add your account credentials to be securely stored."}
-                    </DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="game">Game</Label>
-                            <Select
-                                onValueChange={(value) =>
-                                    setSelectedGame(value as GameId)
+        <Modal
+            opened={open}
+            onClose={() => setOpen(false)}
+            centered
+            withinPortal={false}
+            size="lg"
+            title={isEditing ? "Update account" : "Add account"}
+        >
+            <Stack gap="md">
+                <Text c="dimmed" size="sm">
+                    {isEditing
+                        ? "Update the account details and save your changes."
+                        : "Add your account credentials to be securely stored."}
+                </Text>
+                <form ref={formRef} onSubmit={handleSubmit}>
+                    <Stack gap="md">
+                        <NativeSelect
+                            label="Game"
+                            value={selectedGame}
+                            onChange={(event) => {
+                                const nextGame = event.currentTarget.value;
+                                setSelectedGame(nextGame);
+                                if (nextGame === CUSTOM_GAME_OPTION_ID) {
+                                    return;
                                 }
-                                value={selectedGame}
-                                name="game"
-                            >
-                                <SelectTrigger className="w-full py-5">
-                                    <SelectValue placeholder="None" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {GAME_CATALOG.map((game) => (
-                                        <SelectItem
-                                            key={game.id}
-                                            className="cursor-pointer"
-                                            value={game.id}
-                                        >
-                                            <Stack
-                                                direction="row"
-                                                align="center"
-                                                spacing="small"
-                                            >
-                                                {renderGameIcon(
-                                                    game.label,
-                                                    game.icon
-                                                )}
-                                                <span>{game.label}</span>
-                                            </Stack>
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="groupId">Group</Label>
-                            <Select
-                                name="groupId"
-                                defaultValue={initialGroupId}
-                            >
-                                <SelectTrigger className="w-full py-5">
-                                    <SelectValue placeholder="Select a group" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {groups.map((group) => (
-                                        <SelectItem
-                                            key={group.id}
-                                            value={group.id}
-                                            className="cursor-pointer"
-                                        >
-                                            {group.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="username">
-                                {selectedConfig.usernameLabel ?? "Username"}
-                            </Label>
-                            <Input
-                                id="username"
-                                name="username"
-                                defaultValue={defaultValues?.username ?? ""}
+
+                                if (nextGame === "None" || isBuiltInGame(nextGame)) {
+                                    setCustomGameName("");
+                                    return;
+                                }
+
+                                setCustomGameName(nextGame);
+                            }}
+                            data={[
+                                ...availableGames.map((game) => ({
+                                    value: game.id,
+                                    label: game.label,
+                                })),
+                                {
+                                    value: CUSTOM_GAME_OPTION_ID,
+                                    label: "Custom game…",
+                                },
+                            ]}
+                            leftSection={gameSelectIcon}
+                        />
+                        <input type="hidden" name="game" value={resolvedGameValue} />
+                        {isCreatingCustomGame ? (
+                            <TextInput
+                                label="Custom game name"
+                                name="customGameName"
+                                value={customGameName}
+                                onChange={(event) =>
+                                    setCustomGameName(event.currentTarget.value)
+                                }
+                                placeholder="Enter a game title"
                                 required
                             />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="password">Password</Label>
-                            <Input
-                                id="password"
-                                name="password"
-                                type="password"
-                                defaultValue={defaultValues?.password ?? ""}
-                                required
-                                showPasswordToggle
-                            />
-                        </div>
-                        {gameFields.length > 0 && (
-                            <div className="space-y-4 rounded-md border border-dashed border-muted-foreground/30 p-3">
-                                <div className="text-sm font-medium text-foreground">
-                                    Game-specific fields
-                                </div>
-                                {gameFields.map((field) => (
-                                    <div
-                                        key={field.id}
-                                        className="space-y-2"
-                                    >
-                                        <Label htmlFor={`gameField-${field.id}`}>
-                                            {field.label}
-                                        </Label>
-                                        <Input
-                                            id={`gameField-${field.id}`}
-                                            name={`gameField__${field.id}`}
-                                            type={field.type ?? "text"}
-                                            inputMode={field.inputMode}
-                                            defaultValue={
+                        ) : null}
+                        <NativeSelect
+                            label="Group"
+                            name="groupId"
+                            value={selectedGroupId}
+                            onChange={(event) =>
+                                setSelectedGroupId(event.currentTarget.value)
+                            }
+                        >
+                            {groups.map((group) => (
+                                <option key={group.id} value={group.id}>
+                                    {group.name}
+                                </option>
+                            ))}
+                        </NativeSelect>
+                        <TextInput
+                            label={selectedConfig.usernameLabel ?? "Username"}
+                            id="username"
+                            name="username"
+                            defaultValue={defaultValues?.username ?? ""}
+                            required
+                        />
+                        <PasswordInput
+                            label="Password"
+                            id="password"
+                            name="password"
+                            defaultValue={defaultValues?.password ?? ""}
+                            required
+                        />
+                        {gameFields.length > 0 ? (
+                            <Paper withBorder radius="md" p="sm">
+                                <Stack gap="sm">
+                                    <Text size="sm" fw={500}>
+                                        Game-specific fields
+                                    </Text>
+                                    {gameFields.map((field) => {
+                                        const commonProps = {
+                                            id: `gameField-${field.id}`,
+                                            name: `gameField__${field.id}`,
+                                            inputMode: field.inputMode,
+                                            defaultValue:
                                                 defaultValues?.gameData?.[
                                                     field.id
-                                                ] ?? ""
-                                            }
-                                            placeholder={field.placeholder}
-                                            showPasswordToggle={
-                                                field.type === "password"
-                                            }
-                                        />
-                                        {field.helperText && (
-                                            <p className="text-xs text-muted-foreground">
-                                                {field.helperText}
-                                            </p>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        <div className="space-y-2">
-                            <Label htmlFor="notes">Notes</Label>
-                            <Textarea
-                                id="notes"
-                                name="notes"
-                                defaultValue={defaultValues?.notes ?? ""}
-                                className="min-h-[100px] resize-none"
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            type="submit"
-                            className="w-full"
-                            variant="secondary"
-                        >
+                                                ] ?? "",
+                                            placeholder: field.placeholder,
+                                            label: field.label,
+                                        };
+
+                                        return (
+                                            <Stack key={field.id} gap={4}>
+                                                {field.type === "password" ? (
+                                                    <PasswordInput
+                                                        {...commonProps}
+                                                    />
+                                                ) : (
+                                                    <TextInput
+                                                        {...commonProps}
+                                                        type={
+                                                            field.type ??
+                                                            "text"
+                                                        }
+                                                    />
+                                                )}
+                                                {field.helperText ? (
+                                                    <Text size="xs" c="dimmed">
+                                                        {field.helperText}
+                                                    </Text>
+                                                ) : null}
+                                            </Stack>
+                                        );
+                                    })}
+                                </Stack>
+                            </Paper>
+                        ) : null}
+                        <Textarea
+                            label="Notes"
+                            id="notes"
+                            name="notes"
+                            defaultValue={defaultValues?.notes ?? ""}
+                            className="resize-none"
+                            rows={4}
+                        />
+                        <Button type="submit" fullWidth>
                             {isEditing ? "Update account" : "Add account"}
                         </Button>
-                    </DialogFooter>
+                    </Stack>
                 </form>
-            </DialogContent>
-        </Dialog>
+            </Stack>
+        </Modal>
     );
 }

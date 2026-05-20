@@ -1,14 +1,15 @@
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+    Box,
+    Button,
+    Paper,
+    PasswordInput,
+    Stack,
+    Text,
+    TextInput,
+    Title,
+    useMantineColorScheme,
+} from "@mantine/core";
 
 import { SubmitHandler, useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -61,7 +62,7 @@ const MyForm = () => {
     const {
         register,
         handleSubmit,
-        formState: { errors },
+        formState: { errors, isSubmitting },
     } = useForm<AccountCreationDto>({
         resolver: yupResolver(schema),
     });
@@ -71,21 +72,9 @@ const MyForm = () => {
 
     const onSubmit: SubmitHandler<AccountCreationDto> = async (data) => {
         try {
-            console.log(
-                "Starting registration process with password:",
-                data.password.substring(0, 1) +
-                    "*".repeat(data.password.length - 1)
-            );
-
-            console.log("Initializing encryption...");
-
             let encryptedMasterKey;
             try {
                 encryptedMasterKey = await setupUserEncryption(data.password);
-                console.log(
-                    "Encryption successful:",
-                    encryptedMasterKey.substring(0, 10) + "..."
-                );
             } catch (err) {
                 if (err instanceof Error) {
                     toast({
@@ -97,7 +86,6 @@ const MyForm = () => {
                 return;
             }
 
-            console.log("Sending registration request...");
             const response = await authApi.register({
                 email: data.email,
                 password: data.password,
@@ -116,10 +104,9 @@ const MyForm = () => {
 
             // if valid go to home page
             if (isValid) {
-                navigate("/", { replace: true });
+                navigate("/accounts", { replace: true });
             }
         } catch (error) {
-            console.error("Registration failed:", error);
             let errorMessage = "An unknown error occurred";
 
             if (error instanceof Error) {
@@ -141,74 +128,43 @@ const MyForm = () => {
 
     return (
         <form onSubmit={handleSubmit(onSubmit)}>
-            <div className="flex flex-col gap-6">
-                <div className="grid gap-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                        id="email"
-                        type="email"
-                        placeholder="m@example.com"
-                        required
-                        {...register("email")}
-                    />
-                    {errors.email && (
-                        <p className="text-xs text-red-500">
-                            {errors.email.message}
-                        </p>
-                    )}
-                </div>
-                <div className="grid gap-2">
-                    <Label htmlFor="username">Username</Label>
-                    <Input
-                        id="username"
-                        type="username"
-                        required
-                        {...register("username")}
-                    />
-                    {errors.username && (
-                        <p className="text-xs text-red-500">
-                            {errors.username.message}
-                        </p>
-                    )}
-                </div>
-                <div className="grid gap-2">
-                    <div className="flex items-center">
-                        <Label htmlFor="password">Password</Label>
-                    </div>
-                    <Input
-                        id="password"
-                        type="password"
-                        autoComplete="new-password"
-                        required
-                        showPasswordToggle
-                        {...register("password")}
-                    />
-                    {errors.password && (
-                        <p className="text-xs text-red-500">
-                            {errors.password.message}
-                        </p>
-                    )}
-                </div>
-                <div className="grid gap-2">
-                    <div className="flex items-center">
-                        <Label htmlFor="password">Confirm Password</Label>
-                    </div>
-                    <Input
-                        id="confirm-password"
-                        type="password"
-                        required
-                        {...register("passwordConfirmation")}
-                    />
-                    {errors.passwordConfirmation && (
-                        <p className="text-xs text-red-500">
-                            {errors.passwordConfirmation.message}
-                        </p>
-                    )}
-                </div>
-                <Button type="submit" className="w-full">
+            <Stack gap="lg">
+                <TextInput
+                    label="Email"
+                    id="email"
+                    type="email"
+                    placeholder="m@example.com"
+                    required
+                    error={errors.email?.message}
+                    {...register("email")}
+                />
+                <TextInput
+                    label="Username"
+                    id="username"
+                    type="text"
+                    required
+                    error={errors.username?.message}
+                    {...register("username")}
+                />
+                <PasswordInput
+                    label="Password"
+                    id="password"
+                    autoComplete="new-password"
+                    required
+                    error={errors.password?.message}
+                    {...register("password")}
+                />
+                <PasswordInput
+                    label="Confirm Password"
+                    id="confirm-password"
+                    required
+                    error={errors.passwordConfirmation?.message}
+                    {...register("passwordConfirmation")}
+                />
+                <Button type="submit" fullWidth loading={isSubmitting}>
                     Signup
                 </Button>
-            </div>
+            </Stack>
         </form>
     );
 };
@@ -217,22 +173,36 @@ export function SignupForm({
     className,
     ...props
 }: React.ComponentPropsWithoutRef<"div">) {
+    const { colorScheme } = useMantineColorScheme();
+    const bannerSrc =
+        colorScheme === "dark"
+            ? "./images/banner.png"
+            : "./images/banner-light.png";
+
     return (
-        <div className={cn("flex flex-col gap-6", className)} {...props}>
-            <Card>
-                <CardHeader>
-                    <img
-                        className="rounded-md mx-[24px] mb-2 scale-75"
-                        src="./images/banner-light.png"
+        <Box className={cn("flex w-full flex-col gap-6", className)} {...props}>
+            <Paper withBorder radius="xl" shadow="sm" p="xl">
+                <Stack gap="lg">
+                    <Box
+                        component="img"
+                        src={bannerSrc}
+                        alt="AltShare"
+                        maw={240}
+                        w="100%"
+                        mb="xs"
+                        style={{ display: "block" }}
                     />
-                    <CardDescription>
-                        Enter your information below to create your account
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
+                    <Box>
+                        <Title order={2} size="h2">
+                            Create account
+                        </Title>
+                        <Text c="dimmed" size="sm" mt={4}>
+                            Enter your information below to create your account
+                        </Text>
+                    </Box>
                     <MyForm />
-                </CardContent>
-            </Card>
-        </div>
+                </Stack>
+            </Paper>
+        </Box>
     );
 }

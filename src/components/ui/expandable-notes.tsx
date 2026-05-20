@@ -1,12 +1,17 @@
-import { useState } from 'react';
-import { Button } from './button';
-import { ChevronDown } from 'lucide-react';
+import { useId, useState } from "react";
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-} from './dialog';
+    Button,
+    Modal,
+    Paper,
+    ScrollArea,
+    Stack,
+    Text,
+    UnstyledButton,
+    alpha,
+    useComputedColorScheme,
+    useMantineTheme,
+} from "@mantine/core";
+import { ChevronDown } from "lucide-react";
 
 interface ExpandableNotesProps {
     content: string;
@@ -14,71 +19,129 @@ interface ExpandableNotesProps {
 }
 
 export function ExpandableNotes({ content, showCopyButton = false }: ExpandableNotesProps) {
+    const theme = useMantineTheme();
+    const colorScheme = useComputedColorScheme("light", {
+        getInitialValueInEffect: false,
+    });
+    const dialogBodyId = useId();
     const [isOpen, setIsOpen] = useState(false);
-    const firstLine = content.split('\n')[0];
-    const hasMoreLines = content.includes('\n');
+    const firstLine = content.trim().split("\n")[0] ?? "";
+    const hasMoreLines = content.trim().includes("\n");
 
-    const handleCopy = () => {
-        navigator.clipboard.writeText(content);
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(content);
+        } catch {
+            // Ignore clipboard failures without interrupting note viewing.
+        }
     };
+
+    const noteTone =
+        colorScheme === "dark"
+            ? {
+                  hover: alpha(theme.white, 0.06),
+                  panel: alpha(theme.colors.dark[6], 0.94),
+                  border: alpha(theme.white, 0.1),
+                  text: theme.colors.gray[1],
+                  hint: theme.colors.gray[5],
+              }
+            : {
+                  hover: alpha(theme.colors.blue[6], 0.05),
+                  panel: alpha(theme.white, 0.96),
+                  border: alpha(theme.black, 0.08),
+                  text: theme.colors.dark[6],
+                  hint: theme.colors.gray[6],
+              };
 
     if (!content.trim()) {
         return (
-            <div className="px-3 py-1.5">
-                <span className="text-sm text-muted-foreground">No additional notes available</span>
-            </div>
+            <Text size="sm" c="dimmed" px="sm" py={6}>
+                No additional notes available
+            </Text>
         );
     }
 
     return (
         <div>
-            <button
+            <UnstyledButton
                 onClick={() => setIsOpen(true)}
-                className="w-full text-left px-3 py-1.5 rounded-md hover:bg-accent/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-controls={isOpen ? dialogBodyId : undefined}
+                aria-expanded={isOpen}
+                aria-haspopup="dialog"
+                className="w-full rounded-md px-3 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                style={{ transition: "background-color 150ms ease" }}
+                onMouseEnter={(event) => {
+                    event.currentTarget.style.backgroundColor = noteTone.hover;
+                }}
+                onMouseLeave={(event) => {
+                    event.currentTarget.style.backgroundColor = "transparent";
+                }}
             >
                 <div className="flex items-center justify-between gap-2">
-                    <div className="flex-1 text-sm">
-                        <span className="text-foreground/80">{firstLine}</span>
+                    <div className="min-w-0 flex-1 text-sm">
+                        <Text component="span" span size="sm" truncate="end" c={noteTone.text}>
+                            {firstLine}
+                        </Text>
                         {hasMoreLines && (
-                            <span className="text-xs text-muted-foreground ml-2">
+                            <Text component="span" span size="xs" c={noteTone.hint} ml={8}>
                                 + more
-                            </span>
+                            </Text>
                         )}
                     </div>
                     {hasMoreLines && (
                         <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
                     )}
                 </div>
-            </button>
+            </UnstyledButton>
 
-            <Dialog open={isOpen} onOpenChange={setIsOpen}>
-                <DialogContent
-                    className="sm:max-w-[600px]"
+            <Modal
+                opened={isOpen}
+                onClose={() => setIsOpen(false)}
+                title="Notes"
+                centered
+                size="lg"
+                withinPortal
+            >
+                <Stack
+                    id={dialogBodyId}
+                    gap="sm"
                     data-no-row-select="true"
                     onMouseDown={(event) => event.stopPropagation()}
                 >
-                    <DialogHeader>
-                        <DialogTitle>Notes</DialogTitle>
-                    </DialogHeader>
-                    <div className="mt-4">
-                        <div className="rounded-md bg-muted p-4">
-                            <pre className="whitespace-pre-wrap font-mono text-sm text-foreground">
+                    <Paper
+                        withBorder
+                        radius="md"
+                        p="md"
+                        style={{
+                            backgroundColor: noteTone.panel,
+                            borderColor: noteTone.border,
+                        }}
+                    >
+                        <ScrollArea.Autosize mah={320} type="auto">
+                            <Text
+                                component="pre"
+                                size="sm"
+                                ff="monospace"
+                                c={noteTone.text}
+                                style={{
+                                    margin: 0,
+                                    whiteSpace: "pre-wrap",
+                                    wordBreak: "break-word",
+                                }}
+                            >
                                 {content}
-                            </pre>
-                            {showCopyButton && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleCopy}
-                                    className="mt-2"
-                                >
-                                    Copy
-                                </Button>
-                            )}
+                            </Text>
+                        </ScrollArea.Autosize>
+                    </Paper>
+                    {showCopyButton && (
+                        <div>
+                            <Button variant="light" size="sm" onClick={handleCopy}>
+                                Copy
+                            </Button>
                         </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
+                    )}
+                </Stack>
+            </Modal>
         </div>
     );
 }

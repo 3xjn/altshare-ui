@@ -1,13 +1,14 @@
-import { CircularProgress } from "@/components/ui/progress";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+    Badge,
+    Box,
+    Button,
+    Group,
+    Loader,
+    Paper,
+    Stack,
+    Text,
+    Title,
+} from "@mantine/core";
 import { SignalRService } from "@/services/SignalR";
 import { PeerService } from "@/services/PeerService";
 import { useAccountStore } from "@/stores/AccountStore";
@@ -60,7 +61,7 @@ export const Invite: React.FC = () => {
 
         const code = searchParams.get("code");
         if (!code) {
-            navigate("/");
+            navigate("/accounts");
             return;
         }
 
@@ -164,7 +165,7 @@ export const Invite: React.FC = () => {
                 peer.registerHandler("sharingConfirmation", (payload) => {
                     if (payload.success) {
                         setStage("complete");
-                        navigate("/", { replace: true })
+                        navigate("/accounts", { replace: true })
                     }
                 });
 
@@ -202,15 +203,23 @@ export const Invite: React.FC = () => {
                 signalRServiceRef.current = null;
             }
         };
-    }, [isAuthenticated, navigate, searchParams, toast]);
+    }, [
+        currentEmail,
+        currentPassword,
+        isAuthenticated,
+        navigate,
+        searchParams,
+        setCurrentEmail,
+        toast,
+    ]);
 
     const currentStage = stageCopy[stage];
     const isBusy = stage !== "complete" && stage !== "error";
     const stageBadge =
         stage === "error"
-            ? { label: "Failed", className: "bg-destructive/10 text-destructive" }
+            ? { label: "Failed", color: "red" }
             : stage === "complete"
-              ? { label: "Ready", className: "bg-emerald-500/10 text-emerald-600" }
+              ? { label: "Ready", color: "green" }
               : null;
     const stageHint =
         stage === "waiting"
@@ -225,54 +234,54 @@ export const Invite: React.FC = () => {
 
     return (
         <div className="min-h-screen flex items-center justify-center px-6 py-10">
-            <Card className="w-full max-w-lg">
-                <CardHeader className="space-y-2">
-                    <div className="flex items-start justify-between gap-4">
-                        <div>
-                            <CardTitle>Accept invite</CardTitle>
-                            <CardDescription>
+            <Paper withBorder radius="xl" shadow="sm" p="xl" className="w-full max-w-lg">
+                <Stack gap="lg">
+                    <Group align="flex-start" justify="space-between" gap="md" wrap="nowrap">
+                        <Box>
+                            <Title order={2} size="h3">
+                                Accept invite
+                            </Title>
+                            <Text c="dimmed" size="sm" mt={4}>
                                 Securely connect to the sharing session.
-                            </CardDescription>
-                        </div>
-                        <div className="flex min-w-[92px] justify-end">
+                            </Text>
+                        </Box>
+                        <Box className="flex min-w-[92px] justify-end">
                             {isBusy ? (
-                                <CircularProgress />
+                                <Loader size="sm" type="oval" aria-label="Invite connection in progress" />
                             ) : stageBadge ? (
-                                <div className={`rounded-full px-3 py-1 text-xs font-semibold ${stageBadge.className}`}>
+                                <Badge variant="light" color={stageBadge.color}>
                                     {stageBadge.label}
-                                </div>
+                                </Badge>
                             ) : null}
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="rounded-lg border bg-muted/30 p-4">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        </Box>
+                    </Group>
+                    <Paper withBorder radius="md" p="md" className="bg-muted/30">
+                        <Text size="xs" fw={600} tt="uppercase" c="dimmed">
                             Status
-                        </div>
-                        <div className="mt-2 text-sm font-semibold text-foreground">
+                        </Text>
+                        <Text mt="xs" size="sm" fw={600}>
                             {currentStage.title}
-                        </div>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        </Text>
+                        <Text mt={4} size="sm" c="dimmed">
                             {currentStage.description}
-                        </p>
-                    </div>
+                        </Text>
+                    </Paper>
                     {stageHint ? (
-                        <p className="text-xs text-muted-foreground">
+                        <Text size="xs" c="dimmed">
                             {stageHint}
-                        </p>
+                        </Text>
                     ) : null}
-                </CardContent>
-                <CardFooter className="justify-end">
-                    <Button
-                        variant="outline"
-                        onClick={() => navigate("/")}
+                    <Group justify="flex-end">
+                        <Button
+                        variant="default"
+                        onClick={() => navigate("/accounts")}
                         disabled={isBusy}
                     >
                         Back to accounts
                     </Button>
-                </CardFooter>
-            </Card>
+                    </Group>
+                </Stack>
+            </Paper>
         </div>
     );
 };

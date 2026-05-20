@@ -1,17 +1,8 @@
-import {
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
-} from "@/components/ui/dropdown-menu";
-import type { AccountGroup } from "@/stores/AccountStore";
+import { Menu } from "@mantine/core";
+import { ChevronRight } from "lucide-react";
+import type { AccountGroup } from "@/types/account";
 
 type SelectionMenuContentProps = {
-    align?: "start" | "center" | "end";
-    className?: string;
     groups: AccountGroup[];
     selectedCount: number;
     onBulkMove: (groupId: string) => void;
@@ -20,8 +11,6 @@ type SelectionMenuContentProps = {
 };
 
 export function SelectionMenuContent({
-    align,
-    className,
     groups,
     selectedCount,
     onBulkMove,
@@ -29,38 +18,39 @@ export function SelectionMenuContent({
     onClearSelection,
 }: SelectionMenuContentProps) {
     return (
-        <DropdownMenuContent align={align} className={className}>
-            <DropdownMenuLabel>{selectedCount} selected</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuSub>
-                <DropdownMenuSubTrigger>Move to group</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
+        <Menu.Dropdown>
+            <Menu.Label>{selectedCount} selected</Menu.Label>
+            <Menu.Divider />
+            <Menu.Sub>
+                <Menu.Sub.Target>
+                    <Menu.Sub.Item
+                        rightSection={<ChevronRight className="h-4 w-4" />}
+                    >
+                        Move to group
+                    </Menu.Sub.Item>
+                </Menu.Sub.Target>
+                <Menu.Sub.Dropdown>
                     {groups.length > 0 ? (
                         groups.map((group) => (
-                            <DropdownMenuItem
+                            <Menu.Item
                                 key={group.id}
-                                onSelect={() => onBulkMove(group.id)}
+                                onClick={() => onBulkMove(group.id)}
                             >
                                 {group.name}
-                            </DropdownMenuItem>
+                            </Menu.Item>
                         ))
                     ) : (
-                        <DropdownMenuItem disabled>
-                            No groups available
-                        </DropdownMenuItem>
+                        <Menu.Item disabled>No groups available</Menu.Item>
                     )}
-                </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuItem
-                onSelect={onBulkDelete}
-                className="text-destructive focus:text-destructive"
-            >
+                </Menu.Sub.Dropdown>
+            </Menu.Sub>
+            <Menu.Item color="red" onClick={onBulkDelete}>
                 Delete selected
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={onClearSelection}>
+            </Menu.Item>
+            <Menu.Divider />
+            <Menu.Item onClick={onClearSelection}>
                 Clear selection
-            </DropdownMenuItem>
-        </DropdownMenuContent>
+            </Menu.Item>
+        </Menu.Dropdown>
     );
 }

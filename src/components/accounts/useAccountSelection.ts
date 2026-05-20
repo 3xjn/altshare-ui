@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { accountApi } from "@/services/AccountApi";
 import { encryptAccountData } from "@/utils/encryption";
-import type { Account } from "@/stores/AccountStore";
+import type { Account } from "@/types/account";
 import type { AccountSection } from "@/components/accounts/types";
 import type { Toast } from "@/hooks/use-toast";
 

@@ -1,16 +1,5 @@
-import { Button } from "@/components/ui/button";
-import {
-    DropdownMenu,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
-import type { AccountGroup } from "@/stores/AccountStore";
+import { Button, Group, Menu, NativeSelect } from "@mantine/core";
+import type { AccountGroup } from "@/types/account";
 import { SelectionMenuContent } from "@/components/accounts/SelectionMenuContent";
 
 type AccountsToolbarProps = {
@@ -35,43 +24,44 @@ export function AccountsToolbar({
     onClearSelection,
 }: AccountsToolbarProps) {
     return (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4">
-            <div className="flex flex-wrap items-center gap-3">
-                <Select value={activeGroupId} onValueChange={onGroupChange}>
-                    <SelectTrigger className="w-[200px]">
-                        <SelectValue placeholder="All groups" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All groups</SelectItem>
-                        <SelectItem value="shared">Shared</SelectItem>
-                        {groups.map((group) => (
-                            <SelectItem key={group.id} value={group.id}>
-                                {group.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                <Button variant="outline" size="sm" onClick={onCreateGroup}>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-4 sm:px-6">
+            <Group gap="sm" align="end" className="min-w-0 flex-1" wrap="wrap">
+                <NativeSelect
+                    value={activeGroupId}
+                    onChange={(event) => onGroupChange(event.currentTarget.value)}
+                    style={{
+                        flex: "1 1 14rem",
+                        minWidth: "12rem",
+                        maxWidth: "18rem",
+                    }}
+                    data={[
+                        { value: "all", label: "All groups" },
+                        { value: "shared", label: "Shared" },
+                        ...groups.map((group) => ({
+                            value: group.id,
+                            label: group.name,
+                        })),
+                    ]}
+                />
+                <Button variant="outline" size="compact-sm" onClick={onCreateGroup}>
                     New group
                 </Button>
-            </div>
+            </Group>
             {selectedCount > 0 && (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm">
+                <Menu position="bottom-end" shadow="md" width={224} withinPortal>
+                    <Menu.Target>
+                        <Button variant="outline" size="compact-sm">
                             {selectedCount} selected
                         </Button>
-                    </DropdownMenuTrigger>
+                    </Menu.Target>
                     <SelectionMenuContent
-                        align="end"
-                        className="w-56"
                         groups={groups}
                         selectedCount={selectedCount}
                         onBulkMove={onBulkMove}
                         onBulkDelete={onBulkDelete}
                         onClearSelection={onClearSelection}
                     />
-                </DropdownMenu>
+                </Menu>
             )}
         </div>
     );

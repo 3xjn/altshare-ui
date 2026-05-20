@@ -1,6 +1,7 @@
+import { Box, SimpleGrid, Stack, Text } from "@mantine/core";
 import { TextLabel } from "@/components/ui/text-label";
-import { getGameConfig } from "@/config/games";
-import type { Account } from "@/stores/AccountStore";
+import { getGameConfig, supportsRankTracking } from "@/config/games";
+import type { Account } from "@/types/account";
 import { AccountRank } from "@/components/accounts/AccountRank";
 
 type AccountDetailsProps = {
@@ -9,17 +10,17 @@ type AccountDetailsProps = {
 
 export function AccountDetails({ account }: AccountDetailsProps) {
     const renderDerivedGameDetails = () => {
-        const gameConfig = getGameConfig(account.game);
-
-        if (gameConfig.id !== "Marvel Rivals") {
+        if (!supportsRankTracking(account.game)) {
             return null;
         }
 
         return (
-            <div className="space-y-2">
-                <div className="text-sm font-medium text-foreground">Rank</div>
+            <Stack gap="xs">
+                <Text size="sm" fw={500}>
+                    Rank
+                </Text>
                 <AccountRank account={account} />
-            </div>
+            </Stack>
         );
     };
 
@@ -28,28 +29,36 @@ export function AccountDetails({ account }: AccountDetailsProps) {
     const derivedDetails = renderDerivedGameDetails();
 
     return (
-        <div className="grid gap-4">
+        <Stack gap="md">
             {derivedDetails ? (
-                <div className="space-y-2">
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                <Stack gap="xs">
+                    <Text
+                        size="xs"
+                        c="dimmed"
+                        className="uppercase tracking-wide"
+                    >
                         Game data
-                    </div>
+                    </Text>
                     {derivedDetails}
-                </div>
+                </Stack>
             ) : null}
-            <div className="space-y-3">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+            <Stack gap="sm">
+                <Text
+                    size="xs"
+                    c="dimmed"
+                    className="uppercase tracking-wide"
+                >
                     Game-specific fields
-                </div>
+                </Text>
                 {gameFields.length > 0 ? (
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
                         {gameFields.map((field) => {
                             const value = account.gameData?.[field.id] ?? "";
                             return (
-                                <div key={field.id} className="space-y-2">
-                                    <div className="text-sm font-medium text-foreground">
+                                <Stack key={field.id} gap="xs">
+                                    <Text size="sm" fw={500}>
                                         {field.label}
-                                    </div>
+                                    </Text>
                                     {value ? (
                                         field.type === "password" ? (
                                             <TextLabel
@@ -58,25 +67,27 @@ export function AccountDetails({ account }: AccountDetailsProps) {
                                                 showEyeButton
                                             />
                                         ) : (
-                                            <span className="text-sm text-foreground">
+                                            <Text size="sm">
                                                 {value}
-                                            </span>
+                                            </Text>
                                         )
                                     ) : (
-                                        <span className="text-sm text-muted-foreground">
+                                        <Text size="sm" c="dimmed">
                                             Not set
-                                        </span>
+                                        </Text>
                                     )}
-                                </div>
+                                </Stack>
                             );
                         })}
-                    </div>
+                    </SimpleGrid>
                 ) : (
-                    <p className="text-sm text-muted-foreground">
-                        No game-specific fields for {gameConfig.label}.
-                    </p>
+                    <Box>
+                        <Text size="sm" c="dimmed">
+                            No game-specific fields for {gameConfig.label}.
+                        </Text>
+                    </Box>
                 )}
-            </div>
-        </div>
+            </Stack>
+        </Stack>
     );
 }

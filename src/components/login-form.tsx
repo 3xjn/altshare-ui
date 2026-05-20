@@ -1,14 +1,16 @@
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+    Anchor,
+    Box,
+    Button,
+    Paper,
+    PasswordInput,
+    Stack,
+    Text,
+    TextInput,
+    Title,
+    useMantineColorScheme,
+} from "@mantine/core";
 
 import * as yup from "yup";
 import YupPassword from "yup-password";
@@ -19,6 +21,7 @@ YupPassword(yup);
 import { useEffect } from "react";
 import {
     createSearchParams,
+    Link,
     useNavigate,
     useSearchParams,
 } from "react-router-dom";
@@ -59,7 +62,7 @@ const LoginFormFields = ({ onLoginSuccess }: LoginFormProps) => {
     const {
         register,
         handleSubmit,
-        formState: { errors },
+        formState: { errors, isSubmitting },
     } = useForm<LoginFormData>({
         resolver: yupResolver(schema),
     });
@@ -89,51 +92,35 @@ const LoginFormFields = ({ onLoginSuccess }: LoginFormProps) => {
 
     return (
         <form onSubmit={handleSubmit(onSubmit)}>
-            <div className="flex flex-col gap-6">
-                <div className="grid gap-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                        id="email"
-                        type="email"
-                        autoComplete="email"
-                        placeholder="m@example.com"
-                        required
-                        {...register("email")}
-                    />
-                    {errors.email && (
-                        <p className="text-xs text-red-500">
-                            {errors.email.message}
-                        </p>
-                    )}
-                </div>
-                <div className="grid gap-2">
-                    <div className="flex items-center">
-                        <Label htmlFor="password">Password</Label>
-                    </div>
-                    <Input
-                        id="password"
-                        type="password"
-                        autoComplete="current-password"
-                        showPasswordToggle
-                        required
-                        {...register("password")}
-                    />
-                    {errors.password && (
-                        <p className="text-xs text-red-500">
-                            {errors.password.message}
-                        </p>
-                    )}
-                </div>
-                <Button type="submit" className="w-full">
+            <Stack gap="lg">
+                <TextInput
+                    label="Email"
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="m@example.com"
+                    required
+                    error={errors.email?.message}
+                    {...register("email")}
+                />
+                <PasswordInput
+                    label="Password"
+                    id="password"
+                    autoComplete="current-password"
+                    required
+                    error={errors.password?.message}
+                    {...register("password")}
+                />
+                <Button type="submit" fullWidth loading={isSubmitting}>
                     Login
                 </Button>
-            </div>
-            <div className="mt-4 text-center text-sm">
+            </Stack>
+            <Text mt="md" ta="center" size="sm">
                 Don&apos;t have an account?{" "}
-                <a href="../signup" className="underline underline-offset-4">
+                <Anchor component={Link} to="/signup" underline="always">
                     Sign up
-                </a>
-            </div>
+                </Anchor>
+            </Text>
         </form>
     );
 };
@@ -142,6 +129,7 @@ export function LoginForm({
     className,
     ...props
 }: Omit<React.ComponentPropsWithoutRef<"div">, "onSubmit">) {
+    const { colorScheme } = useMantineColorScheme();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { toast } = useToast();
@@ -179,10 +167,10 @@ export function LoginForm({
                 );
             } else {
                 // not from invite, go to main page
-                navigate("/", { replace: true });
+                navigate("/accounts", { replace: true });
             }
         }
-    }, [isAuthenticated, navigate]);
+    }, [isAuthenticated, navigate, searchParams]);
 
     const handleLoginSuccess = (data: LoginSuccessData) => {
         setIsAuthenticated(true);
@@ -190,26 +178,38 @@ export function LoginForm({
         setCurrentEmail(data.email);
         setEncryptedMasterKey(data.response.masterKeyEncrypted);
 
-        navigate("/", { replace: true });
+        navigate("/accounts", { replace: true });
     };
 
+    const bannerSrc =
+        colorScheme === "dark"
+            ? "./images/banner.png"
+            : "./images/banner-light.png";
+
     return (
-        <div className={cn("flex flex-col gap-6", className)} {...props}>
-            <Card>
-                <CardHeader className="pt-6">
-                    <img
-                        className="rounded-md mx-[24px] mb-2 scale-75"
-                        src="./images/banner-light.png"
-                    />
-                    <CardTitle className="text-2xl">Login</CardTitle>
-                    <CardDescription>
-                        Enter your information below to login to your account
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
+        <Box className={cn("flex w-full flex-col gap-6", className)} {...props}>
+            <Paper withBorder radius="xl" shadow="sm" p="xl">
+                <Stack gap="lg">
+                    <Box>
+                        <Box
+                            component="img"
+                            src={bannerSrc}
+                            alt="AltShare"
+                            maw={240}
+                            w="100%"
+                            mb="xs"
+                            style={{ display: "block" }}
+                        />
+                        <Title order={2} size="h2">
+                            Login
+                        </Title>
+                        <Text c="dimmed" size="sm" mt={4}>
+                            Enter your information below to login to your account
+                        </Text>
+                    </Box>
                     <LoginFormFields onLoginSuccess={handleLoginSuccess} />
-                </CardContent>
-            </Card>
-        </div>
+                </Stack>
+            </Paper>
+        </Box>
     );
 }

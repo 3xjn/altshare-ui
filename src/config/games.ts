@@ -1,4 +1,10 @@
-export type GameId = "None" | "Marvel Rivals" | "Roblox";
+export const CUSTOM_GAME_OPTION_ID = "__custom__";
+
+export type BuiltInGameId =
+    | "None"
+    | "League of Legends"
+    | "Marvel Rivals"
+    | "Roblox";
 
 export type GameField = {
     id: string;
@@ -10,11 +16,13 @@ export type GameField = {
 };
 
 export type GameConfig = {
-    id: GameId;
+    id: string;
     label: string;
     icon?: string;
     usernameLabel?: string;
     fields?: GameField[];
+    supportsRank?: boolean;
+    isCustom?: boolean;
 };
 
 export const GAME_CATALOG: GameConfig[] = [
@@ -23,10 +31,16 @@ export const GAME_CATALOG: GameConfig[] = [
         label: "None",
     },
     {
+        id: "League of Legends",
+        label: "League of Legends",
+        icon: "./images/league-of-legends.png",
+    },
+    {
         id: "Marvel Rivals",
         label: "Marvel Rivals",
         icon: "./images/marvel-rivals.png",
         usernameLabel: "Username (IGN)",
+        supportsRank: true,
     },
     {
         id: "Roblox",
@@ -44,15 +58,59 @@ export const GAME_CATALOG: GameConfig[] = [
     },
 ];
 
+const GAME_CONFIG_BY_ID = new Map(GAME_CATALOG.map((game) => [game.id, game]));
+
+export const normalizeGameName = (game?: string | null): string => game?.trim() ?? "";
+
+export const normalizeStoredGame = (game?: string | null): string | undefined => {
+    const normalized = normalizeGameName(game);
+
+    if (!normalized || normalized === "None") {
+        return undefined;
+    }
+
+    return normalized;
+};
+
+const createCustomGameConfig = (game: string): GameConfig => ({
+    id: game,
+    label: game,
+    isCustom: true,
+});
+
+export const isBuiltInGame = (game?: string | null): game is BuiltInGameId => {
+    const normalized = normalizeGameName(game);
+    return GAME_CONFIG_BY_ID.has(normalized);
+};
+
+export const getGameCatalog = (
+    games: readonly (string | null | undefined)[] = []
+): GameConfig[] => {
+    const customGames = Array.from(
+        new Set(
+            games
+                .map((game) => normalizeGameName(game))
+                .filter(
+                    (game) => game.length > 0 && game !== "None" && !isBuiltInGame(game)
+                )
+        )
+    )
+        .sort((left, right) => left.localeCompare(right))
+        .map((game) => createCustomGameConfig(game));
+
+    return [...GAME_CATALOG, ...customGames];
+};
+
 export const getGameConfig = (game?: string | null): GameConfig => {
-    const normalized = game && game !== "None" ? game : "None";
-    const match = GAME_CATALOG.find((item) => item.id === normalized);
+    const resolvedGame = normalizeStoredGame(game) ?? "None";
+    const match = GAME_CONFIG_BY_ID.get(resolvedGame);
+
     if (match) {
         return match;
     }
 
-    return {
-        id: "None",
-        label: normalized || "None",
-    };
+    return createCustomGameConfig(resolvedGame);
 };
+
+export const supportsRankTracking = (game?: string | null): boolean =>
+    Boolean(getGameConfig(game).supportsRank);

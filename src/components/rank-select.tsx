@@ -1,12 +1,4 @@
-import {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectLabel,
-    SelectTrigger,
-    SelectValue,
-} from "./ui/select";
+import { NativeSelect } from "@mantine/core";
 
 interface RankSelectProps {
     rank: (typeof RANKS)[number]["name"];
@@ -28,34 +20,15 @@ export function RankSelect(props: RankSelectProps) {
     const { rank } = props;
 
     return (
-        <Select defaultValue={rank as unknown as string}>
-            <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Select a fruit" />
-            </SelectTrigger>
-            <SelectContent>
-                <SelectGroup>
-                    <SelectLabel></SelectLabel>
-                    {RANKS.map((rank) => (
-                        <div key={rank.name}>
-                            <SelectLabel>
-                                {rank.name}
-                            </SelectLabel>
-                            {rank.subRanks.length > 0 && (
-                                <div className="ml-4">
-                                    {rank.subRanks.map((subRank) => (
-                                        <SelectItem
-                                            key={`${rank.name}-${subRank}`}
-                                            value={`${rank.name}-${subRank}`}
-                                        >
-                                            {`${rank.name} ${subRank}`}
-                                        </SelectItem>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    ))}
-                </SelectGroup>
-            </SelectContent>
-        </Select>
+        <NativeSelect
+            defaultValue={rank}
+            className="w-[180px]"
+            data={RANKS.flatMap((tier) =>
+                tier.subRanks.map((subRank) => ({
+                    value: `${tier.name}-${subRank}`,
+                    label: `${tier.name} ${subRank}`,
+                }))
+            )}
+        />
     );
 }
