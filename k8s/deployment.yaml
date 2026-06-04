@@ -14,8 +14,6 @@ spec:
       labels:
         app: altshare-ui
     spec:
-      imagePullSecrets:
-        - name: ghcr-auth
       containers:
       - name: altshare-ui
         image: '${REGISTRY_URL}:${IMAGE_TAG}'
